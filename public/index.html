@@ -170,11 +170,22 @@ function durLong(ms){
 /* ── platform ─────────────────────────────────────────────────────────────── */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// Every iOS browser is WebKit underneath, but only Safari can install a real standalone
+// web app — so a PWA test started from Chrome or Firefox is not the test it looks like.
+const isThirdPartyIOSBrowser = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+const isStandalone = () =>
+  matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
 if (isIOS) $('#platformNote').innerHTML = `<p class="note"><b>This is an iPhone or iPad.</b>
   iOS suspends microphone capture the moment the screen locks — there is no background-audio
   permission for web pages. Expect this test to show a gap starting exactly when you lock.
-  That result is the answer, not a bug: it means the recorder has to be a native app.</p>`;
+  That result is the answer, not a bug: it means the recorder has to be a native app.</p>` +
+  (isThirdPartyIOSBrowser && !isStandalone()
+    ? `<p class="note"><b>This is not Safari.</b> Every iOS browser runs on WebKit, so the
+       result will be the same — but only Safari can install a standalone web app. If you
+       want to rule out the installed-PWA case, run that test from Safari's
+       <em>Add to Home Screen</em>, not from here.</p>`
+    : '');
 
 /* ── session ──────────────────────────────────────────────────────────────── */
 function snapshot(){
@@ -190,7 +201,8 @@ function save(){
 function load(){
   try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch { return null; }
 }
-const mark = what => { if (S) S.marks.push({ at: Date.now(), what }); };
+let pendingMarks = [];
+const mark = what => (S ? S.marks : pendingMarks).push({ at: Date.now(), what });
 
 /* ── worklet: RMS per frame + a running sample counter ────────────────────── */
 const WORKLET_SRC = `
@@ -243,7 +255,8 @@ function startKeepAlive(){
   silentEl = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
   silentEl.loop = true; silentEl.volume = 0;
   silentEl.play().then(() => mark('keep-alive playing'))
-                 .catch(e => mark('keep-alive play failed: ' + e.name));
+                 .catch(e => mark('KEEP-ALIVE NEVER STARTED: ' + e.name +
+                   ' — this run does not test the keep-alive profile'));
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: 'Recording the night', artist: 'Sleeptracker' });
@@ -258,6 +271,12 @@ function startKeepAlive(){
 async function start(){
   $('#err').textContent = '';
   const profile = document.querySelector('input[name=profile]:checked').value;
+
+  // Anything needing the user gesture has to happen here, synchronously. getUserMedia and
+  // the worklet module take seconds to resolve, and by the time they do the gesture has
+  // expired — which is exactly how the first keep-alive run died with an AbortError,
+  // silently invalidating the whole profile.
+  if (profile === 'keepalive') startKeepAlive();
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -281,7 +300,7 @@ async function start(){
   const t0 = Date.now();
   A = new NightAnalyser({ sampleRate: ctx.sampleRate, t0 });
   S = { t0, startedAt:new Date(t0).toISOString(), endedAt:null, ended:false,
-        profile, ua:navigator.userAgent.slice(0,120), marks:[] };
+        profile, ua:navigator.userAgent.slice(0,120), marks:pendingMarks.splice(0) };
 
   const src = ctx.createMediaStreamSource(stream);
   node = new AudioWorkletNode(ctx, 'meter');
@@ -295,10 +314,9 @@ async function start(){
   track.onunmute = () => mark('audio track unmuted');
   track.onended  = () => mark('AUDIO TRACK ENDED');
   ctx.onstatechange = () => mark('audiocontext: ' + ctx.state);
-  mark(`started · profile=${profile}`);
+  mark(`started · profile=${profile} · ${isStandalone() ? 'installed PWA' : 'browser tab'}`);
 
   if (profile === 'screenon') await acquireWakeLock();
-  if (profile === 'keepalive') startKeepAlive();
 
   $('#app').style.display = 'none';
   $('#rec').classList.add('on');
