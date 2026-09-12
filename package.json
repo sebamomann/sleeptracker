@@ -12,7 +12,7 @@
     "lint": "npm run lint:swift && npm run lint:format && npm run lint:dupes",
     "lint:swift": "swiftlint lint --strict --quiet",
     "lint:format": "swiftformat --lint .",
-    "lint:dupes": "jscpd . --reporters console",
+    "lint:dupes": "npx --yes jscpd@4 . --config .jscpd.json --reporters console",
     "lint:fix": "swiftlint --fix --quiet && swiftformat .",
     "check": "npm test && npm run lint"
   },
