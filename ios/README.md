@@ -37,15 +37,35 @@ Recordings land in the app's Documents directory as `nights/<date>/events/NNNN-H
 
 ## The 7-day expiry
 
-A free personal team signs for **7 days**. After that the app refuses to launch until it is
-re-signed. Two ways to live with that:
+Within the window the app is completely normal — microphone, background capture, all of it.
+Nothing degrades over the 7 days; at the end the app simply refuses to launch until it is
+re-signed. Re-sign on day 5 or 6 rather than finding out at bedtime on day 8; signing early
+costs nothing, the clock restarts from that moment.
 
-- **Press ⌘R again** with the phone connected. It rebuilds, re-signs and installs over the
-  top. Same bundle ID means an upgrade, not a fresh install — **your recorded nights are
-  preserved**. About 30 seconds, once a week.
-- **[SideStore](https://sidestore.io) / [AltStore](https://altstore.io)** re-sign
-  automatically. AltStore needs AltServer running on a Mac on the same Wi-Fi; SideStore does
-  it on-device with no computer. Set it up once and stop thinking about it.
+Three ways to do it, none needing a cable after the first pairing:
+
+| | Cable | Automatic | Mac running |
+|---|---|---|---|
+| **Xcode over Wi-Fi** | once, to pair | no — you press ⌘R | yes, Xcode open |
+| **AltStore + AltServer** | once | **yes**, in the background | yes, on the same Wi-Fi |
+| **SideStore** | once, to pair | yes | **no** |
+
+**Xcode over Wi-Fi.** Pair the phone over USB once, then *Window → Devices and Simulators* →
+tick **Connect via network**. After that ⌘R deploys wirelessly. Same bundle ID means an
+upgrade, not a fresh install — **your recorded nights are preserved**.
+
+**AltStore**, to stop thinking about it entirely. AltServer refreshes the signature in the
+background whenever the phone is on the same Wi-Fi. It installs `.ipa` files, and
+*Product → Archive → Distribute* cannot produce one here — that path wants a distribution
+certificate a free team does not have. `ios/scripts/make-ipa.sh` builds for device and
+wraps the result instead:
+
+```sh
+sh ios/scripts/make-ipa.sh      # → ios/build/SleepTracker.ipa
+```
+
+AirDrop it to the phone and open it with AltStore. (Written against the documented
+procedure but **not run** — there is no Xcode on the machine it was written on.)
 
 Re-signing the same app does not consume new App IDs — the 10-per-week limit applies to
 *distinct* bundle identifiers, not rebuilds.
