@@ -56,6 +56,17 @@ made only in Swift is untested by definition.
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
 own `DateFormatter` that had already drifted. Add to `Design/` instead.
 
+**The spectral ramp is for data only.** `Theme.spectrum` — violet, cyan, mint, amber — paints
+bars, chart fills and classifier output, and nothing else. Structure, labels and chrome stay
+greyscale, which is what leaves the numbers as the only colour on a screen. `Theme.gap` sits
+deliberately outside the ramp so a warning can never be mistaken for a measurement. The app
+is dark-committed; there is no light mode, by choice.
+
+**The recording screen answers to different rules from everything else.** It has its own
+ground (`NightGround`) and a single ink token (`Theme.nightInk`, currently cool teal). It is
+the only screen looked at in the dark, so anything added there stays dim and low-contrast.
+Switching back to the dim red it used to have is one token.
+
 **Animation goes through `Motion`, and must yield to Reduce Motion.** Use `Motion.quick`,
 `.standard`, `.gentle` or `.springy`, and either `.motion(_:value:)` or
 `withAnimation(Motion.respecting(...))` — never a bare `Animation` literal. Two speeds for

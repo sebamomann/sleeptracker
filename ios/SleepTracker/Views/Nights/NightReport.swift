@@ -62,7 +62,7 @@ struct NightReport: View {
             }
             .padding(Layout.gutter)
         }
-        .background(Theme.surface0)
+        .spectrogramGround()
         .navigationTitle(Fmt.dayTime.string(from: session.startedAt))
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
@@ -78,25 +78,47 @@ struct NightReport: View {
     // MARK: - Headline
 
     private var headline: some View {
-        VStack(alignment: .leading, spacing: Layout.tight) {
-            Text(summary)
-                .font(.headlineStat)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(figure.value)
+                    .font(.displayValue)
+                    .foregroundStyle(Theme.textPrimary)
+                Text(figure.unit)
+                    .font(.rowLabel)
+                    .foregroundStyle(Theme.textMuted)
+            }
+            if let rest = secondary {
+                Text(rest)
+                    .font(.headlineStat)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
             Text("\(session.wall.short) recorded · \(session.events.count) events · "
-                + "\(session.keptAudio.short) of audio kept")
+                + "\(session.keptAudio.short) kept")
                 .font(.rowMeta)
                 .foregroundStyle(Theme.textMuted)
+                .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// A sentence, assembled from whatever the night actually contained — an empty night
-    /// should say so rather than print a row of zeroes.
-    private var summary: String {
-        var parts: [String] = []
+    /// The single number the screen is about. Snoring when there was any, since that is what
+    /// people open this for; otherwise the event count, so an unusual night still leads with
+    /// something true rather than a zero.
+    private var figure: (value: String, unit: String) {
         if session.snoringSeconds >= 60 {
-            parts.append("Snored \(session.snoringSeconds.short)")
+            return (session.snoringSeconds.short, "snoring")
         }
+        if !session.events.isEmpty {
+            return ("\(session.events.count)", session.events.count == 1 ? "sound" : "sounds")
+        }
+        return ("Quiet", "nothing crossed the gate")
+    }
+
+    /// Whatever the figure does not already say.
+    private var secondary: String? {
+        var parts: [String] = []
         let spoke = session.events.filter { !($0.transcript ?? "").isEmpty }.count
         if spoke > 0 {
             parts.append("\(spoke) thing\(spoke == 1 ? "" : "s") you said")
@@ -105,11 +127,6 @@ struct NightReport: View {
         if concerns > 0 {
             parts.append("\(concerns) worth attention")
         }
-        if parts.isEmpty {
-            parts.append(session.events.isEmpty
-                ? "A quiet night"
-                : "\(session.events.count) sounds, nothing notable")
-        }
-        return parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

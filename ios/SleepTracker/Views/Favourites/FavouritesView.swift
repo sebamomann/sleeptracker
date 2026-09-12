@@ -36,7 +36,7 @@ struct FavouritesView: View {
                 .motion(Motion.standard, value: filter)
                 .motion(Motion.standard, value: store.markedCount)
             }
-            .background(Theme.surface0)
+            .spectrogramGround()
             .navigationTitle("Favourites")
             .onDisappear { player.stop() }
             .sheet(item: $editing) { pending in

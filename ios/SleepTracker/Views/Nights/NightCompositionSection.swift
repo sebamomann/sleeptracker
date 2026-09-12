@@ -44,7 +44,7 @@ struct NightCompositionSection: View {
             // thirty-second episodes.
             GeometryReader { geo in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Theme.signal)
+                    .fill(Theme.spectrumGradientAcross)
                     .frame(width: max(3, geo.size.width * row.seconds / longest))
             }
             .frame(height: 5)

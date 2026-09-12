@@ -16,7 +16,7 @@ struct RecordView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.surface0)
+        .nightGround()
         .onAppear {
             guard !Motion.isReduced else { return }
             withAnimation(Motion.breathing) { breathing = true }

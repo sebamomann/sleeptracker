@@ -1,29 +1,35 @@
 import SwiftUI
 
-/// Semantic text roles, so a "row title" looks the same in every list.
+/// Semantic text roles, on a scale with actual contrast.
 ///
-/// Deliberately named for their job rather than their size: the previous code picked from
-/// `.caption`, `.caption2`, `.footnote` and `.callout` per call site, so equivalent things
-/// ended up different sizes in different views.
+/// The app previously ran on six sizes between 11 and 20 points, so a section heading, a row
+/// title and a timestamp all read at about the same importance and nothing led. This scale
+/// opens a gap at the top and turns headings into quiet tracked eyebrows, which leaves one
+/// figure per screen as the thing your eye lands on first.
 extension Font {
-    /// The one number a screen is about.
-    static let metricValue = Font.system(.title3, design: .rounded).weight(.semibold)
-    /// The label above or below a metric.
-    static let metricLabel = Font.caption2.weight(.medium)
+    /// The one figure a screen is about. Condensed, so a large number does not dominate the
+    /// width it sits in.
+    static let displayValue = Font.system(size: 38, weight: .semibold).width(.condensed)
+    /// The sentence beside or below the display figure.
+    static let headlineStat = Font.system(size: 22, weight: .semibold)
 
-    /// Section heading within a scroll view.
-    static let sectionTitle = Font.subheadline.weight(.semibold)
-    /// A summary sentence at the top of a screen.
-    static let headlineStat = Font.title3.weight(.semibold)
+    /// Section heading. Small, tracked and muted — set with `SectionHeader`, which applies
+    /// the uppercasing and letter-spacing this size needs.
+    static let sectionTitle = Font.system(size: 11, weight: .medium)
 
-    /// Primary text in a list row — timestamps and the like, so monospaced.
-    static let rowTitle = Font.callout.monospaced()
+    /// A metric in a tile.
+    static let metricValue = Font.system(size: 24, weight: .semibold).width(.condensed)
+    /// The label above a metric.
+    static let metricLabel = Font.system(size: 10, weight: .medium)
+
+    /// Primary text in a row — timestamps included, hence the fixed-width digits.
+    static let rowTitle = Font.system(size: 15, weight: .medium).monospacedDigit()
     /// A classifier label or other emphasised inline word.
-    static let rowLabel = Font.caption.weight(.medium)
+    static let rowLabel = Font.system(size: 12.5, weight: .medium)
     /// Figures under a row title.
-    static let rowMeta = Font.caption2.monospaced()
+    static let rowMeta = Font.system(size: 11).monospaced()
     /// Explanatory prose: captions, disclaimers, empty states.
-    static let explain = Font.footnote
+    static let explain = Font.system(size: 12.5)
     /// The smallest supporting text.
-    static let fine = Font.caption2
+    static let fine = Font.system(size: 11)
 }

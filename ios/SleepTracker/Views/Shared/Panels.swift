@@ -56,9 +56,14 @@ struct SectionHeader: View {
     }
 
     var body: some View {
-        Text(title)
+        // Uppercased and tracked rather than bold: at 11 points a heading that competes
+        // with body text for weight just makes the page louder, while a quiet label with
+        // air in it reads as structure.
+        Text(title.uppercased())
             .font(.sectionTitle)
+            .tracking(1.6)
+            .foregroundStyle(Theme.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, Layout.tight)
+            .padding(.top, Layout.loose)
     }
 }

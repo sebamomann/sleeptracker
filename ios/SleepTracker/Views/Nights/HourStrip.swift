@@ -20,8 +20,10 @@ struct HourStrip: View {
                         GeometryReader { geo in
                             VStack(spacing: 0) {
                                 Spacer(minLength: 0)
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(h.seconds == 0 ? Theme.surface2 : Theme.signal)
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(h.seconds == 0
+                                        ? AnyShapeStyle(Theme.surface2)
+                                        : AnyShapeStyle(Theme.spectrumGradient))
                                     .frame(height: grown
                                         ? max(3, geo.size.height * h.seconds / scale)
                                         : 3)

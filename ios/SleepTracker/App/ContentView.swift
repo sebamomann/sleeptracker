@@ -118,7 +118,7 @@ private struct RecordTab: View {
                 }
                 .padding(Layout.gutter)
             }
-            .background(Theme.surface0)
+            .spectrogramGround()
             .navigationTitle("Sleeptracker")
         }
     }
@@ -179,20 +179,25 @@ private struct NightsTab: View {
                     }
                     .padding(Layout.gutter)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .background(Theme.surface0)
+                    .spectrogramGround()
                 } else {
                     List {
                         ForEach(store.sessions) { s in
                             NavigationLink { NightReport(session: s, store: store) } label: {
                                 row(s)
                             }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparatorTint(Theme.line)
                         }
                         .onDelete { idx in
                             idx.map { store.sessions[$0].id }.forEach(store.delete)
                         }
                     }
                     .listStyle(.plain)
-                    .background(Theme.surface0)
+                    // A List paints its own opaque background, which would sit on top of the
+                    // ground and hide it. Rows carry their own surface, so nothing is lost.
+                    .scrollContentBackground(.hidden)
+                    .spectrogramGround()
                     .motion(Motion.standard, value: store.sessions.count)
                 }
             }

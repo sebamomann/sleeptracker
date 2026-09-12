@@ -75,8 +75,15 @@ struct EnvelopePlot {
         }
         area.addLine(to: CGPoint(x: size.width, y: plotHeight))
         area.closeSubpath()
+        // The ramp read against the dB axis: loud moments reach the amber end, quiet ones
+        // stay violet. The colour is doing the same job as the height.
         context.fill(area, with: .linearGradient(
-            Gradient(colors: [Theme.signal.opacity(0.45), Theme.signal.opacity(0.06)]),
+            Gradient(colors: [
+                Theme.spectrumAmber.opacity(0.55),
+                Theme.spectrumMint.opacity(0.40),
+                Theme.spectrumCyan.opacity(0.28),
+                Theme.spectrumViolet.opacity(0.10)
+            ]),
             startPoint: .zero, endPoint: CGPoint(x: 0, y: plotHeight)
         ))
         context.stroke(line(\.max), with: .color(Theme.signal), lineWidth: 1)

@@ -39,7 +39,7 @@ struct NoteEditor: View {
                 Spacer()
             }
             .padding(Layout.gutter)
-            .background(Theme.surface0)
+            .spectrogramGround()
             .navigationTitle("Note")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

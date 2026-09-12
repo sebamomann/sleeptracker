@@ -17,7 +17,8 @@ enum Layout {
     /// Between grouped items.
     static let loose: CGFloat = 8
 
-    static let cardRadius: CGFloat = 12
+    /// Near-square. The Spectrogram direction leans on hairlines rather than pills.
+    static let cardRadius: CGFloat = 5
     static let rowInsetV: CGFloat = 10
     static let rowInsetH: CGFloat = 13
 
