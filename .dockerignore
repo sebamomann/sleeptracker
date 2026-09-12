@@ -1,0 +1,7 @@
+.git
+.idea
+certs
+node_modules
+*.iml
+docs-spike.md
+scripts/dev-https.mjs

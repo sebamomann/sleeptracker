@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>Sleeptracker</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+  :root{
+    color-scheme: dark;
+    --surface-0:#000000; --surface-1:#1a1a19; --surface-2:#242422;
+    --line:#3a3a37;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8a897f;
+    --series-signal:#3987e5; --series-event:#199e70; --series-gap:#e66767;
+    --night-ink:#8f2f2f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text-primary);
+    font:14px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  .wrap{max-width:920px;margin:0 auto;padding:24px 20px 64px}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+  h2{font-size:15px;font-weight:600;margin:32px 0 10px;letter-spacing:-.01em}
+  .sub{color:var(--text-secondary);margin:0 0 22px}
+  .card{background:var(--surface-1);border:1px solid var(--line);border-radius:10px;padding:16px}
+  button{font:inherit;font-weight:600;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface-2);color:var(--text-primary);padding:12px 18px;cursor:pointer}
+  button:hover{border-color:#55554f}
+  button.primary{background:var(--series-signal);border-color:var(--series-signal);color:#fff;
+    padding:17px 28px;font-size:16px;width:100%}
+  button.danger{background:transparent;border-color:var(--series-gap);color:var(--series-gap)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .hint{color:var(--text-muted);font-size:13px}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--text-secondary)}
+  a{color:var(--series-signal)}
+
+  /* profile picker */
+  .profiles{display:grid;gap:8px;margin:0 0 16px}
+  .profiles label{display:flex;gap:11px;align-items:flex-start;padding:13px 14px;cursor:pointer;
+    border:1px solid var(--line);border-radius:9px;background:var(--surface-1);line-height:1.45}
+  .profiles label:has(input:checked){border-color:var(--series-signal);background:rgba(57,135,229,.09)}
+  .profiles input{margin:3px 0 0;flex:none}
+  .profiles b{display:block;font-weight:600;margin-bottom:1px}
+  .profiles span{color:var(--text-secondary);font-size:13px}
+
+  .note{border-left:2px solid var(--series-gap);padding:2px 0 2px 14px;margin:0 0 20px;
+    color:var(--text-secondary)}
+  .note b{color:var(--text-primary)}
+  .banner{background:var(--surface-1);border:1px solid var(--series-gap);border-radius:10px;
+    padding:14px 16px;margin:0 0 18px}
+  .banner b{display:block;margin-bottom:3px}
+
+  /* ── recording screen: black, dim red, one big target ── */
+  #rec{position:fixed;inset:0;background:#000;display:none;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;padding:24px;text-align:center}
+  #rec.on{display:flex}
+  #clock{font:600 clamp(48px,16vw,110px)/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:var(--night-ink);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  #elapsed{color:var(--night-ink);opacity:.75;font-size:15px;font-variant-numeric:tabular-nums}
+  #meter{width:min(380px,78vw);height:6px;background:#1c0d0d;border-radius:3px;overflow:hidden}
+  #meterFill{height:100%;width:0%;background:var(--night-ink);transition:width .1s linear}
+  #recStats{color:var(--night-ink);opacity:.5;font-size:12px;font-variant-numeric:tabular-nums}
+  #stopBtn{margin-top:14px;background:transparent;border:1px solid #4a1a1a;color:#8f2f2f;
+    font-size:15px;padding:16px 34px;border-radius:999px}
+  #lockHint{color:#4e1c1c;font-size:12.5px;max-width:300px;line-height:1.5}
+
+  /* ── report ── */
+  .verdict{border-radius:10px;padding:18px 20px;margin:0 0 24px;border:1px solid}
+  .verdict.good{background:rgba(25,158,112,.1);border-color:var(--series-event)}
+  .verdict.bad{background:rgba(230,103,103,.1);border-color:var(--series-gap)}
+  .verdict h3{margin:0 0 4px;font-size:17px}
+  .verdict p{margin:0;color:var(--text-secondary)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px}
+  .tile{background:var(--surface-1);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .tile .k{color:var(--text-muted);font-size:12px;margin-bottom:6px}
+  .tile .v{font:600 24px/1.15 ui-sans-serif,system-ui;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .tile .n{color:var(--text-muted);font-size:12px;margin-top:4px}
+  figure{margin:0}
+  figcaption{color:var(--text-secondary);font-size:13px;margin:0 0 12px}
+  .chartbox{position:relative;background:var(--surface-1);border:1px solid var(--line);
+    border-radius:10px;padding:14px 14px 8px}
+  canvas{display:block;width:100%;height:auto}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:12px 2px 0;color:var(--text-secondary);font-size:12.5px}
+  .legend span{display:flex;align-items:center;gap:7px}
+  .sw{width:11px;height:11px;border-radius:2px;flex:none}
+  #tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;
+    font-size:12.5px;line-height:1.5;white-space:nowrap;font-variant-numeric:tabular-nums;
+    box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--text-muted);font-weight:500;font-size:12px}
+  td.num{text-align:right}
+  .tablewrap{overflow-x:auto;background:var(--surface-1);border:1px solid var(--line);border-radius:10px}
+  .empty{color:var(--text-muted);padding:16px;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="rec">
+  <div id="clock">--:--</div>
+  <div id="meter"><div id="meterFill"></div></div>
+  <div id="elapsed">recording 0:00:00</div>
+  <div id="recStats"></div>
+  <button id="stopBtn">Stop recording</button>
+  <div id="lockHint">You can lock the phone now. Unlock in the morning and press stop —
+    or use the pause button on the lock screen.</div>
+</div>
+
+<div class="wrap" id="app">
+  <h1>Sleeptracker · survival spike</h1>
+  <p class="sub">Phase 0. Stores no audio — it measures whether the browser keeps capturing
+  while your phone is locked, and what your bedroom's noise floor is.</p>
+
+  <div id="setup">
+    <div id="recovery"></div>
+    <div id="platformNote"></div>
+
+    <div class="profiles">
+      <label><input type="radio" name="profile" value="baseline" checked>
+        <span><b>Baseline</b><span>Nothing but the recorder. Lock the phone and see what the
+        OS does. Run this first — it is the measurement.</span></span></label>
+      <label><input type="radio" name="profile" value="keepalive">
+        <span><b>Keep-alive</b><span>Also registers a media session with a silent audio loop, so
+        the OS treats the page as active playback. Try this if baseline died.</span></span></label>
+      <label><input type="radio" name="profile" value="screenon">
+        <span><b>Screen on</b><span>Holds a wake lock so the screen never sleeps. The fallback
+        you said you don't want — here to confirm capture itself works.</span></span></label>
+    </div>
+
+    <button class="primary" id="startBtn">Start recording</button>
+    <p class="hint" style="margin:12px 0 0">Plug the device in. Recording survives a locked
+    screen only if the OS allows it — that is the whole question.</p>
+    <p class="hint" id="err" style="color:var(--series-gap)"></p>
+  </div>
+
+  <div id="report" hidden></div>
+</div>
+
+<script type="module">
+import { NightAnalyser, DEFAULTS, keptMs, megabytesFor, median } from './analysis.js';
+
+const $ = s => document.querySelector(s);
+const KEY = 'sleeptracker.spike.v2';
+
+let A = null, S = null, ctx = null, node = null, stream = null,
+    wakeLock = null, silentEl = null, uiTimer = null, saveTimer = null;
+
+/* ── formatting ───────────────────────────────────────────────────────────── */
+const hhmm   = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+const hhmmss = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+function dur(ms){
+  const s = Math.round(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60);
+  return h ? `${h}h ${String(m).padStart(2,'0')}m`
+           : (m ? `${m}m ${String(s%60).padStart(2,'0')}s` : `${s}s`);
+}
+function durLong(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  return `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+
+/* ── platform ─────────────────────────────────────────────────────────────── */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+if (isIOS) $('#platformNote').innerHTML = `<p class="note"><b>This is an iPhone or iPad.</b>
+  iOS suspends microphone capture the moment the screen locks — there is no background-audio
+  permission for web pages. Expect this test to show a gap starting exactly when you lock.
+  That result is the answer, not a bug: it means the recorder has to be a native app.</p>`;
+
+/* ── session ──────────────────────────────────────────────────────────────── */
+function snapshot(){
+  return { v:2, t0:S.t0, startedAt:S.startedAt, endedAt:S.endedAt, ended:S.ended,
+           profile:S.profile, ua:S.ua, marks:S.marks, ...A.toJSON() };
+}
+function save(){
+  if (!S || !A) return;
+  try { localStorage.setItem(KEY, JSON.stringify(snapshot())); }
+  catch (e) { mark('save failed: ' + e.name); }
+}
+function load(){
+  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+const mark = what => { if (S) S.marks.push({ at: Date.now(), what }); };
+
+/* ── worklet: RMS per frame + a running sample counter ────────────────────── */
+const WORKLET_SRC = `
+class Meter extends AudioWorkletProcessor {
+  constructor(){ super(); this.per = Math.round(sampleRate * ${DEFAULTS.FRAME_MS} / 1000);
+    this.acc = 0; this.n = 0; this.total = 0; this.batch = []; }
+  process(inputs){
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    for (let i = 0; i < ch.length; i++){
+      const s = ch[i]; this.acc += s*s;
+      if (++this.n >= this.per){ this.batch.push(Math.sqrt(this.acc/this.n)); this.acc = 0; this.n = 0; }
+    }
+    this.total += ch.length;
+    if (this.batch.length >= 10){ this.port.postMessage({ rms:this.batch, total:this.total }); this.batch = []; }
+    return true;
+  }
+}
+registerProcessor('meter', Meter);`;
+
+/* ── lifecycle ────────────────────────────────────────────────────────────── */
+document.addEventListener('visibilitychange', async () => {
+  if (!S || S.ended) return;
+  mark('visibility: ' + document.visibilityState);
+  if (document.visibilityState === 'hidden') {
+    save();                     // the phone is probably being locked right now
+  } else {
+    // Coming back from a lock. The context may have been suspended under us.
+    if (ctx && ctx.state === 'suspended') { try { await ctx.resume(); mark('context resumed'); } catch {} }
+    if (S.profile === 'screenon') acquireWakeLock();
+    save();
+  }
+});
+addEventListener('pagehide', () => { if (S && !S.ended) { mark('pagehide'); save(); } });
+addEventListener('freeze',   () => { if (S && !S.ended) { mark('page frozen by browser'); save(); } });
+addEventListener('resume',   () => mark('page resumed'));
+
+async function acquireWakeLock(){
+  if (!('wakeLock' in navigator)) { mark('wake lock unsupported'); return; }
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => mark('wake lock released'));
+  } catch (e) { mark('wake lock failed: ' + e.name); }
+}
+
+function startKeepAlive(){
+  // A silent looping WAV plus media-session metadata. On Android this promotes the page
+  // to an active media session, which is the thing that survives a screen lock. It also
+  // puts a stop control on the lock screen.
+  silentEl = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+  silentEl.loop = true; silentEl.volume = 0;
+  silentEl.play().then(() => mark('keep-alive playing'))
+                 .catch(e => mark('keep-alive play failed: ' + e.name));
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Recording the night', artist: 'Sleeptracker' });
+    navigator.mediaSession.playbackState = 'playing';
+    for (const a of ['pause', 'stop']) {
+      try { navigator.mediaSession.setActionHandler(a, () => stop()); } catch {}
+    }
+  }
+}
+
+/* ── start / stop ─────────────────────────────────────────────────────────── */
+async function start(){
+  $('#err').textContent = '';
+  const profile = document.querySelector('input[name=profile]:checked').value;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        // All three off on purpose: AGC renormalises levels so the noise floor becomes
+        // meaningless, and noise suppression deletes exactly the quiet sounds we hunt for.
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        channelCount: 1,
+      }
+    });
+  } catch (e) {
+    $('#err').textContent = `Microphone unavailable (${e.name}). Needs HTTPS and mic permission.`;
+    return;
+  }
+
+  ctx = new AudioContext({ sampleRate: 16000 });     // YAMNet's native rate
+  await ctx.audioWorklet.addModule(
+    URL.createObjectURL(new Blob([WORKLET_SRC], { type:'application/javascript' })));
+  await ctx.resume();
+
+  const t0 = Date.now();
+  A = new NightAnalyser({ sampleRate: ctx.sampleRate, t0 });
+  S = { t0, startedAt:new Date(t0).toISOString(), endedAt:null, ended:false,
+        profile, ua:navigator.userAgent.slice(0,120), marks:[] };
+
+  const src = ctx.createMediaStreamSource(stream);
+  node = new AudioWorkletNode(ctx, 'meter');
+  node.port.onmessage = e => A.pushFrames(e.data.rms, e.data.total, Date.now());
+  // Keep the graph rendering at zero gain — an idle context is a suspendable context.
+  const mute = ctx.createGain(); mute.gain.value = 0;
+  src.connect(node).connect(mute).connect(ctx.destination);
+
+  const track = stream.getAudioTracks()[0];
+  track.onmute   = () => mark('AUDIO TRACK MUTED');
+  track.onunmute = () => mark('audio track unmuted');
+  track.onended  = () => mark('AUDIO TRACK ENDED');
+  ctx.onstatechange = () => mark('audiocontext: ' + ctx.state);
+  mark(`started · profile=${profile}`);
+
+  if (profile === 'screenon') await acquireWakeLock();
+  if (profile === 'keepalive') startKeepAlive();
+
+  $('#app').style.display = 'none';
+  $('#rec').classList.add('on');
+  uiTimer   = setInterval(tickUI, 1000);
+  saveTimer = setInterval(save, 10000);
+  tickUI(); save();
+}
+
+function tickUI(){
+  if (!A || !S) return;
+  const wall = Date.now() - S.t0;
+  $('#clock').textContent   = hhmm(Date.now());
+  $('#elapsed').textContent = 'recording ' + durLong(wall);
+  $('#meterFill').style.width =
+    Math.max(0, Math.min(100, (A.readPeak() + 70) / 70 * 100)) + '%';
+  $('#recStats').textContent =
+    `${Math.round(A.floorDb)} dB floor · ${A.events.length} events · ` +
+    `${A.realGaps.length} gaps · ${dur(A.deadMs)} dead`;
+}
+
+async function stop(){
+  if (!S || S.ended) return;
+  S.ended = true; S.endedAt = new Date().toISOString();
+  mark('stopped');
+  clearInterval(uiTimer); clearInterval(saveTimer);
+  const snap = snapshot();
+  try { localStorage.setItem(KEY, JSON.stringify(snap)); } catch {}
+  try { stream?.getTracks().forEach(t => t.stop()); } catch {}
+  try { await ctx?.close(); } catch {}
+  try { await wakeLock?.release(); } catch {}
+  try { silentEl?.pause(); } catch {}
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
+  $('#rec').classList.remove('on');
+  $('#app').style.display = '';
+  renderReport(snap);
+}
+
+/* ── report ───────────────────────────────────────────────────────────────── */
+function renderReport(s){
+  $('#setup').hidden = true;
+  const r = $('#report'); r.hidden = false;
+
+  const wall = s.wallMs, audioMs = s.audioSec * 1000;
+  const deadMs = Math.max(0, wall - audioMs);
+  const realGaps = s.gaps.filter(g => g.audioLostMs > DEFAULTS.LOST_MS);
+  const worst = realGaps.reduce((m, g) => Math.max(m, g.audioLostMs), 0);
+  const survived = deadMs < 30000 && wall > 60000;
+  const tooShort = wall <= 60000;
+
+  const fMed = Math.round(median(s.env.map(e => e[2])));
+  const gate = fMed + DEFAULTS.GATE_DB;
+  const evtMs = keptMs(s.events);
+
+  // When capture died, say when relative to the lock — that is the diagnostic.
+  const lockMark = s.marks.find(m => m.what === 'visibility: hidden');
+  const firstGap = realGaps[0];
+  const lockedThenDied = lockMark && firstGap &&
+    Math.abs(firstGap.at - lockMark.at) < 20000;
+
+  r.innerHTML = `
+    <div class="verdict ${survived ? 'good' : 'bad'}">
+      <h3>${tooShort ? 'Too short to judge'
+            : survived ? 'Survived — capture ran end to end'
+            : `Capture stopped for ${dur(deadMs)}`}</h3>
+      <p>${tooShort ? 'Run a full night before drawing any conclusion.'
+          : survived ? `The browser kept the audio thread alive for the whole session on the
+            <b>${s.profile}</b> profile. The web path works on this device.`
+          : lockedThenDied
+            ? `Capture stopped within seconds of the screen going dark. The OS suspended the
+               page on lock — no amount of web-side work changes that. The recorder needs to
+               be a native app.`
+            : `The audio thread was suspended. Check the gap table against the browser events
+               below to see what coincided with it.`}</p>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="k">Wall clock</div><div class="v">${durLong(wall)}</div>
+        <div class="n">${hhmmss(s.t0)} → ${hhmmss(s.t0 + wall)}</div></div>
+      <div class="tile"><div class="k">Audio captured</div><div class="v">${durLong(audioMs)}</div>
+        <div class="n">${wall ? (audioMs / wall * 100).toFixed(2) : 0}% of wall clock</div></div>
+      <div class="tile"><div class="k">Dead time</div>
+        <div class="v" style="color:${deadMs > 30000 ? 'var(--series-gap)' : 'var(--text-primary)'}">${dur(deadMs)}</div>
+        <div class="n">${realGaps.length} gap${realGaps.length === 1 ? '' : 's'}${worst ? `, worst ${dur(worst)}` : ''}</div></div>
+      <div class="tile"><div class="k">Noise floor</div><div class="v">${fMed} dB</div>
+        <div class="n">median of per-second p10</div></div>
+      <div class="tile"><div class="k">Suggested gate</div><div class="v">${gate} dB</div>
+        <div class="n">floor + ${DEFAULTS.GATE_DB} dB</div></div>
+      <div class="tile"><div class="k">Would have kept</div><div class="v">${dur(evtMs)}</div>
+        <div class="n">${s.events.length} events · ${wall ? (evtMs / wall * 100).toFixed(1) : 0}% of the night</div></div>
+    </div>
+
+    <h2>The night</h2>
+    <figure>
+      <figcaption>Loudness per second in dBFS. The gate would have opened where the envelope
+      crosses ${gate} dB.</figcaption>
+      <div class="chartbox">
+        <canvas id="cv"></canvas><div id="tip"></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--series-signal)"></i>peak loudness</span>
+          <span><i class="sw" style="background:var(--text-muted)"></i>noise floor</span>
+          <span><i class="sw" style="background:var(--series-event)"></i>gate events</span>
+          <span><i class="sw" style="background:var(--series-gap)"></i>dead time</span>
+        </div>
+      </div>
+    </figure>
+
+    <h2>Gaps${realGaps.length ? ` (${realGaps.length})` : ''}</h2>
+    <div class="tablewrap">${realGaps.length ? `
+      <table><thead><tr><th>At</th><th>Into the night</th>
+        <th class="num">Audio lost</th><th class="num">Stall</th></tr></thead><tbody>
+        ${realGaps.slice(0,60).map(g => `<tr><td>${hhmmss(g.at)}</td>
+          <td>${durLong(g.at - s.t0)}</td>
+          <td class="num" style="color:var(--series-gap)">${dur(g.audioLostMs)}</td>
+          <td class="num">${dur(g.ms)}</td></tr>`).join('')}
+      </tbody></table>${realGaps.length > 60 ? `<div class="empty">+ ${realGaps.length - 60} more</div>` : ''}`
+      : `<div class="empty">No audio was lost.${s.gaps.length
+          ? ` (${s.gaps.length} main-thread stall${s.gaps.length === 1 ? '' : 's'} — the UI was
+             throttled, but capture kept running. Harmless.)` : ''}</div>`}
+    </div>
+
+    <h2>Browser events</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>At</th><th>Into the night</th><th>What</th></tr></thead>
+      <tbody>${s.marks.map(m => `<tr><td>${hhmmss(m.at)}</td>
+        <td>${durLong(m.at - s.t0)}</td><td>${m.what}</td></tr>`).join('')}</tbody>
+    </table></div>
+
+    <h2>What this means for phase 1</h2>
+    <div class="card">
+      <p style="margin:0 0 10px">Gate at <b>${gate} dB</b> (floor ${fMed} + ${DEFAULTS.GATE_DB}).
+      At that threshold this night produced <b>${s.events.length} events</b> totalling
+      <b>${dur(evtMs)}</b> of audio.</p>
+      <p style="margin:0;color:var(--text-secondary)">At 24 kbps mono Opus that is
+      <b>${megabytesFor(evtMs).toFixed(1)} MB</b> to upload and classify, against
+      <b>${megabytesFor(wall).toFixed(0)} MB</b> for the ungated night.</p>
+    </div>
+
+    <div class="row" style="margin-top:24px">
+      <button id="dl">Download JSON</button>
+      <button id="again" class="danger">Discard &amp; record another night</button>
+    </div>`;
+
+  drawChart(s, gate);
+  $('#dl').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], {type:'application/json'}));
+    a.download = `sleep-spike-${new Date(s.t0).toISOString().slice(0,16).replace(/[:T]/g,'-')}.json`;
+    a.click();
+  };
+  $('#again').onclick = () => {
+    if (!confirm('Discard this night’s data?')) return;
+    localStorage.removeItem(KEY); location.reload();
+  };
+}
+
+/* ── envelope chart ───────────────────────────────────────────────────────── */
+function drawChart(s, gateDb){
+  const cv = $('#cv'), tip = $('#tip');
+  if (!cv) return;
+  if (s.env.length < 2){
+    cv.replaceWith(Object.assign(document.createElement('div'),
+      { className:'empty', textContent:'Not enough data to chart.' }));
+    return;
+  }
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = cv.parentElement.clientWidth - 28, H = 260;
+  const pad = { l:42, r:12, t:12, b:40 };
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const g = cv.getContext('2d'); g.scale(dpr, dpr);
+
+  const n = s.env.length, DB_LO = -80, DB_HI = 0;
+  const x  = i  => pad.l + i / (n - 1) * (W - pad.l - pad.r);
+  const y  = db => pad.t + (DB_HI - Math.max(DB_LO, Math.min(DB_HI, db))) / (DB_HI - DB_LO)
+                   * (H - pad.t - pad.b);
+  const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+  g.clearRect(0, 0, W, H);
+  g.font = '11px ui-sans-serif,system-ui'; g.textBaseline = 'middle';
+  for (let db = DB_LO; db <= DB_HI; db += 20){
+    g.strokeStyle = css('--line'); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(pad.l, y(db) + .5); g.lineTo(W - pad.r, y(db) + .5); g.stroke();
+    g.fillStyle = css('--text-muted'); g.textAlign = 'right';
+    g.fillText(db + ' dB', pad.l - 8, y(db));
+  }
+
+  g.fillStyle = css('--series-gap') + '40';
+  for (const q of s.gaps.filter(q => q.audioLostMs > DEFAULTS.LOST_MS)){
+    const i0 = Math.max(0, Math.floor((q.at - s.t0) / 1000));
+    const i1 = Math.min(n - 1, i0 + Math.ceil(q.audioLostMs / 1000));
+    g.fillRect(x(i0), pad.t, Math.max(2, x(i1) - x(i0)), H - pad.t - pad.b);
+  }
+
+  g.beginPath(); g.moveTo(x(0), y(DB_LO));
+  for (let i = 0; i < n; i++) g.lineTo(x(i), y(s.env[i][1]));
+  g.lineTo(x(n - 1), y(DB_LO)); g.closePath();
+  g.fillStyle = css('--series-signal') + '59'; g.fill();
+  g.beginPath();
+  for (let i = 0; i < n; i++) i ? g.lineTo(x(i), y(s.env[i][1])) : g.moveTo(x(i), y(s.env[i][1]));
+  g.strokeStyle = css('--series-signal'); g.lineWidth = 1; g.stroke();
+
+  g.beginPath();
+  for (let i = 0; i < n; i++) i ? g.lineTo(x(i), y(s.env[i][2])) : g.moveTo(x(i), y(s.env[i][2]));
+  g.strokeStyle = css('--text-muted'); g.lineWidth = 2; g.stroke();
+
+  g.setLineDash([4,4]); g.strokeStyle = css('--series-event') + 'aa'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(pad.l, y(gateDb) + .5); g.lineTo(W - pad.r, y(gateDb) + .5); g.stroke();
+  g.setLineDash([]);
+
+  const railY = H - pad.b + 10;
+  g.strokeStyle = css('--series-event'); g.lineWidth = 2; g.lineCap = 'round';
+  for (const ev of s.events){
+    const x0 = x(Math.min(n - 1, Math.floor(ev.s))), x1 = x(Math.min(n - 1, Math.ceil(ev.e)));
+    g.beginPath(); g.moveTo(x0, railY); g.lineTo(Math.max(x1, x0 + 1.5), railY); g.stroke();
+  }
+
+  g.textAlign = 'center'; g.fillStyle = css('--text-muted');
+  const step = Math.max(600, Math.ceil(n / 8 / 600) * 600);
+  for (let i = 0; i < n; i += step) g.fillText(hhmm(s.t0 + i * 1000), x(i), H - 10);
+
+  cv.onpointermove = e => {
+    const rect = cv.getBoundingClientRect();
+    const i = Math.round((e.clientX - rect.left - pad.l) / (W - pad.l - pad.r) * (n - 1));
+    if (i < 0 || i >= n){ tip.style.opacity = 0; return; }
+    const [, max, p10] = s.env[i];
+    const ev = s.events.find(v => i >= v.s - 1 && i <= v.e + 1);
+    tip.innerHTML = `<b>${hhmmss(s.t0 + i * 1000)}</b><br>peak ${max} dB · floor ${p10} dB<br>` +
+      (ev ? `<span style="color:var(--series-event)">event · peak ${ev.peak} dB · ${dur((ev.e - ev.s) * 1000)}</span>`
+          : `<span style="color:var(--text-muted)">below gate</span>`);
+    tip.style.opacity = 1;
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.max(8, Math.min(W - tw, x(i) - tw / 2)) + 'px';
+    tip.style.top  = (y(max) - tip.offsetHeight - 12) + 'px';
+  };
+  cv.onpointerleave = () => { tip.style.opacity = 0; };
+}
+
+/* ── boot: recover an interrupted session ─────────────────────────────────── */
+$('#startBtn').onclick = start;
+$('#stopBtn').onclick  = stop;
+
+const prev = load();
+if (prev && prev.env?.length > 10){
+  const when = `${hhmm(prev.t0)}–${hhmm(prev.t0 + prev.wallMs)}`;
+  $('#recovery').innerHTML = prev.ended
+    ? `<div class="banner" style="border-color:var(--line)">
+         <b>Last night is saved</b><span class="hint">${when} · ${durLong(prev.wallMs)}</span>
+         <div class="row" style="margin-top:10px"><button id="showPrev">Open report</button></div></div>`
+    : `<div class="banner">
+         <b>A session ended without being stopped</b>
+         <span class="hint">${when} · the tab was reloaded or evicted. Everything up to the
+         last save is intact — that partial data is itself the result.</span>
+         <div class="row" style="margin-top:10px"><button id="showPrev">Open report</button></div></div>`;
+  $('#showPrev').onclick = () => renderReport(prev);
+}
+</script>
+</body>
+</html>
