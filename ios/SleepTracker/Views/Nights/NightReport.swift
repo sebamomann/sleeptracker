@@ -14,6 +14,8 @@ struct NightReport: View {
     @ObservedObject var store: NightsStore
     @StateObject private var player = EventPlayer()
     @State private var editing: PendingNote?
+    @State private var pendingDelete: NightDeletion?
+    @Environment(\.dismiss) private var dismiss
 
     init(session: NightSession, store: NightsStore) {
         fallback = session
@@ -68,6 +70,25 @@ struct NightReport: View {
         .onDisappear { player.stop() }
         .sheet(item: $editing) { pending in
             NoteEditor(event: pending.event, sessionID: session.id, store: store)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive) {
+                        pendingDelete = NightDeletion(session: session)
+                    } label: {
+                        Label("Delete night", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .confirmNightDeletion($pendingDelete) { deletion in
+            player.stop()
+            store.delete(id: deletion.id)
+            // Nothing left to show, so leave rather than sit on an empty report.
+            dismiss()
         }
     }
 

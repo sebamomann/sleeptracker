@@ -167,6 +167,7 @@ private struct RecordTab: View {
 
 private struct NightsTab: View {
     @ObservedObject var store: NightsStore
+    @State private var pendingDelete: NightDeletion?
 
     var body: some View {
         NavigationStack {
@@ -189,8 +190,12 @@ private struct NightsTab: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparatorTint(Theme.line)
                         }
-                        .onDelete { idx in
-                            idx.map { store.sessions[$0].id }.forEach(store.delete)
+                        // A swipe asks rather than acts: the audio is only on this phone,
+                        // and .onDelete would have destroyed a night on one gesture.
+                        .onDelete { offsets in
+                            guard let first = offsets.first,
+                                  store.sessions.indices.contains(first) else { return }
+                            pendingDelete = NightDeletion(session: store.sessions[first])
                         }
                     }
                     .listStyle(.plain)
@@ -202,6 +207,11 @@ private struct NightsTab: View {
                 }
             }
             .navigationTitle("Nights")
+        }
+        .confirmNightDeletion($pendingDelete) { deletion in
+            withAnimation(Motion.respecting(Motion.standard)) {
+                store.delete(id: deletion.id)
+            }
         }
     }
 
