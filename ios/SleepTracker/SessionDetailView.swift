@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct SessionDetailView: View {
-    let session: NightSession
+    @State private var session: NightSession
     @StateObject private var player = EventPlayer()
     @State private var showDiagnostics = false
+    @State private var classifying = false
+
+    init(session: NightSession) { _session = State(initialValue: session) }
 
     private var store: SessionStore { .shared }
 
@@ -13,6 +16,7 @@ struct SessionDetailView: View {
                 Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
                 backgroundEvidence
                 tiles
+                composition
                 if session.envelope.count > 1 {
                     SectionHeader(text: "The night")
                     EnvelopeChart(session: session)
@@ -61,6 +65,95 @@ struct SessionDetailView: View {
         .padding(14)
         .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
+    }
+
+    // MARK: - What the night was made of
+
+    @ViewBuilder
+    private var composition: some View {
+        let breakdown = session.byLabel
+        let unlabelled = session.unlabelledEvents
+
+        if !breakdown.isEmpty || !unlabelled.isEmpty {
+            SectionHeader(text: "What it heard")
+            VStack(alignment: .leading, spacing: 9) {
+                if breakdown.isEmpty {
+                    Text("Nothing is labelled yet.")
+                        .font(.footnote).foregroundStyle(Theme.textMuted)
+                } else {
+                    let longest = breakdown.first?.seconds ?? 1
+                    ForEach(breakdown, id: \.label) { row in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(row.display).font(.caption.weight(.medium))
+                                Spacer()
+                                Text("\(row.count) · \(row.seconds.short)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                            // Bar length is time, not count: forty one-second ticks matter
+                            // less than four thirty-second episodes.
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Theme.signal)
+                                    .frame(width: max(3, geo.size.width * row.seconds / longest))
+                            }
+                            .frame(height: 5)
+                        }
+                    }
+                }
+
+                if !unlabelled.isEmpty {
+                    Divider().overlay(Theme.line)
+                    Button {
+                        classifyMissing(unlabelled)
+                    } label: {
+                        HStack(spacing: 7) {
+                            if classifying { ProgressView().controlSize(.mini) }
+                            Text(classifying
+                                 ? "Classifying…"
+                                 : "Classify \(unlabelled.count) unlabelled event\(unlabelled.count == 1 ? "" : "s")")
+                                .font(.caption.weight(.medium))
+                        }
+                    }
+                    .disabled(classifying)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
+        }
+    }
+
+    /// Label events recorded before classification existed, or missed at the time.
+    private func classifyMissing(_ pending: [NightSession.EventRecord]) {
+        classifying = true
+        let id = session.id
+        let store = self.store
+        Task.detached(priority: .utility) {
+            var labelled: [Int: [SoundLabel]] = [:]
+            for e in pending {
+                let url = store.url(forEvent: e, in: id)
+                let labels = EventClassifier.shared.classify(url: url)
+                if !labels.isEmpty { labelled[e.index] = labels }
+            }
+            // Frozen before crossing to the main actor: a var captured by a concurrently
+            // executing closure is a data race, and an error under Swift 6.
+            let results = labelled
+            await MainActor.run {
+                for (index, labels) in results {
+                    if let i = session.events.firstIndex(where: { $0.index == index }) {
+                        session.events[i].labels = labels
+                    }
+                }
+                if session.knownLabels == nil {
+                    session.knownLabels = EventClassifier.shared.knownLabels
+                }
+                try? store.save(session)
+                classifying = false
+            }
+        }
     }
 
     // MARK: - Tiles
@@ -121,9 +214,19 @@ struct SessionDetailView: View {
                                 .font(.title3)
                                 .foregroundStyle(Theme.event)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(Self.secondsFormatter.string(from: e.at))
-                                    .font(.callout.monospaced())
-                                    .foregroundStyle(Theme.textPrimary)
+                                HStack(spacing: 7) {
+                                    Text(Self.secondsFormatter.string(from: e.at))
+                                        .font(.callout.monospaced())
+                                        .foregroundStyle(Theme.textPrimary)
+                                    if let l = e.topLabel {
+                                        Text(l.display)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(Theme.signal)
+                                        Text("\(Int(l.confidence * 100))%")
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(Theme.textMuted)
+                                    }
+                                }
                                 Text("\(String(format: "%.1f", e.durationS))s · peak \(Int(e.peakDb)) dB")
                                     .font(.caption2.monospaced())
                                     .foregroundStyle(Theme.textMuted)
@@ -184,7 +287,8 @@ struct SessionDetailView: View {
                     }
                     .padding(.vertical, 5).padding(.horizontal, 12)
                 }
-                Text("device: \(session.device.model) · iOS \(session.device.systemVersion) · app \(session.device.appVersion)")
+                Text("device: \(session.device.model) · iOS \(session.device.systemVersion) · app \(session.device.appVersion)"
+                     + " · classifier labels: \(session.knownLabels?.count ?? 0)")
                     .font(.caption2.monospaced()).foregroundStyle(Theme.textMuted)
                     .padding(.vertical, 8).padding(.horizontal, 12)
             }

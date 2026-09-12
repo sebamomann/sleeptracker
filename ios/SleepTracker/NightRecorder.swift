@@ -1,4 +1,10 @@
-import AVFoundation
+// @preconcurrency silences one Sendable warning: AVAudioConverter's input block is
+// @Sendable and captures the tap's buffer. That capture is safe because the block runs
+// synchronously inside convert(), on the audio thread, while the buffer is still valid —
+// handing the same buffer to another queue to read *later* was the real bug, and that is
+// gone. Without this, the only alternatives are suppressing it at the call site or
+// pretending AVAudioPCMBuffer is Sendable.
+@preconcurrency import AVFoundation
 import Foundation
 import UIKit
 
@@ -36,6 +42,10 @@ final class NightRecorder: ObservableObject {
     /// cannot check it, the serial queue enforces it.
     private let processing = DispatchQueue(label: "de.sebamomann.sleeptracker.processing",
                                             qos: .userInitiated)
+    /// Writing a WAV and classifying it takes tens to hundreds of milliseconds. On the
+    /// processing queue that would stall the audio path behind it and drop capture, so it
+    /// gets its own queue and a lower priority.
+    private let io = DispatchQueue(label: "de.sebamomann.sleeptracker.io", qos: .utility)
     private nonisolated(unsafe) var converter: AVAudioConverter?
     private nonisolated(unsafe) var gate: NoiseGate?
     private nonisolated(unsafe) var ring: SampleRing?
@@ -67,6 +77,11 @@ final class NightRecorder: ObservableObject {
                           appVersion: Self.appVersion),
             sampleRate: Self.sampleRate)
         s.marks.append(.init(at: s.t0, what: "started"))
+        let classifier = EventClassifier.shared
+        s.knownLabels = classifier.knownLabels
+        s.marks.append(.init(at: s.t0, what: classifier.isAvailable
+            ? "classifier ready, \(classifier.knownLabels.count) labels"
+            : "CLASSIFIER UNAVAILABLE"))
         session = s
 
         processing.sync {
@@ -244,8 +259,8 @@ final class NightRecorder: ObservableObject {
         // state is touched from elsewhere.
         let hw = hwFormat
         let work = workFormat
+        converter = AVAudioConverter(from: hw, to: work)
         processing.sync {
-            converter = AVAudioConverter(from: hw, to: work)
             if gate == nil {
                 let g = NoiseGate(sampleRate: Self.sampleRate)
                 g.onEvent = { [weak self] event in self?.harvest(event) }   // on `processing`
@@ -269,22 +284,21 @@ final class NightRecorder: ObservableObject {
         let ratio = work.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
 
-        var samples: [Float] = []
-        processing.sync {
-            guard let converter, let out = AVAudioPCMBuffer(pcmFormat: work,
-                                                            frameCapacity: capacity) else { return }
-            var supplied = false
-            var err: NSError?
-            converter.convert(to: out, error: &err) { _, status in
-                if supplied { status.pointee = .noDataNow; return nil }
-                supplied = true
-                status.pointee = .haveData
-                return buffer
-            }
-            guard err == nil, out.frameLength > 0, let channel = out.floatChannelData?[0] else { return }
-            samples = Array(UnsafeBufferPointer(start: channel, count: Int(out.frameLength)))
+        // Converted inline on the audio thread. Handing this to another queue and waiting
+        // would put the audio path behind whatever that queue is doing, and a stall here is
+        // dropped capture.
+        guard let converter, let out = AVAudioPCMBuffer(pcmFormat: work,
+                                                        frameCapacity: capacity) else { return }
+        var supplied = false
+        var err: NSError?
+        converter.convert(to: out, error: &err) { _, status in
+            if supplied { status.pointee = .noDataNow; return nil }
+            supplied = true
+            status.pointee = .haveData
+            return buffer
         }
-        guard !samples.isEmpty else { return }
+        guard err == nil, out.frameLength > 0, let channel = out.floatChannelData?[0] else { return }
+        let samples = Array(UnsafeBufferPointer(start: channel, count: Int(out.frameLength)))
         processing.async { [weak self] in self?.consume(samples) }
     }
 
@@ -320,14 +334,28 @@ final class NightRecorder: ObservableObject {
             return
         }
 
+        eventCounter += 1
+        let index = eventCounter
+        let at = nightStart.addingTimeInterval(Double(event.startSample) / Self.sampleRate)
+        let startS = Double(event.startSample) / Self.sampleRate
+        let endS = Double(event.endSample) / Self.sampleRate
+        let peak = event.peakDB
+        let night = nightID
+
+        io.async { [weak self] in
+            self?.writeAndClassify(samples: samples, index: index, at: at,
+                                   startS: startS, endS: endS, peak: peak, nightID: night)
+        }
+    }
+
+    /// On `io`: fade, write, classify, then report back. Never on the audio path.
+    private nonisolated func writeAndClassify(samples: [Float], index: Int, at: Date,
+                                              startS: Double, endS: Double, peak: Double,
+                                              nightID: String) {
         // Ramp the edges: a gated clip starts at an arbitrary sample, so its first and last
         // values are almost never zero, and that step is audible as a click at both ends.
         var faded = samples
         Self.fadeEdges(&faded, rate: Self.sampleRate, ms: 40)
-
-        eventCounter += 1
-        let index = eventCounter
-        let at = nightStart.addingTimeInterval(Double(event.startSample) / Self.sampleRate)
         let file = String(format: "%04d-%@.wav", index, Self.timeFormatter.string(from: at))
         let url = SessionStore.shared.eventsDirectory(for: nightID).appendingPathComponent(file)
 
@@ -350,13 +378,17 @@ final class NightRecorder: ObservableObject {
             }
             try audioFile.write(from: buf)
 
+            // Classified here, after the file exists — the classifier reads it back rather
+            // than taking a buffer, and this queue is free to take its time.
+            let labels = EventClassifier.shared.classify(url: url)
+
             let record = NightSession.EventRecord(
                 index: index, file: file,
                 atMs: at.timeIntervalSince1970 * 1000,
-                startS: Double(event.startSample) / Self.sampleRate,
-                endS: Double(event.endSample) / Self.sampleRate,
-                durationS: Double(samples.count) / Self.sampleRate,
-                peakDb: event.peakDB)
+                startS: startS, endS: endS,
+                durationS: Double(faded.count) / Self.sampleRate,
+                peakDb: peak,
+                labels: labels.isEmpty ? nil : labels)
             Task { @MainActor [weak self] in
                 self?.session?.events.append(record)
                 self?.persist()

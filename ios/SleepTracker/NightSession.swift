@@ -23,6 +23,10 @@ struct NightSession: Codable, Identifiable {
         var endS: Double
         var durationS: Double
         var peakDb: Double
+        /// Top labels from the on-device classifier, most confident first. Nil for events
+        /// recorded before classification existed, or when the classifier is unavailable.
+        var labels: [SoundLabel]?
+        var topLabel: SoundLabel? { labels?.first }
         var id: Int { index }
         var at: Date { Date(timeIntervalSince1970: atMs / 1000) }
     }
@@ -48,6 +52,9 @@ struct NightSession: Codable, Identifiable {
     var events: [EventRecord] = []
     var interruptions = 0
     var droppedEvents = 0                  // audio that scrolled out of the ring
+    /// Every label this device's classifier can produce, recorded once so the available set
+    /// is documented rather than assumed.
+    var knownLabels: [String]?
     /// Wall clock of the most recent audio callback. The only record of when capture
     /// stopped, if it stopped and never resumed.
     var lastFrameAtMs: Double?
@@ -80,6 +87,23 @@ extension NightSession {
     var diedAndStayedDead: Bool { trailingDead > 60 }
 
     var keptAudio: TimeInterval { events.reduce(0) { $0 + $1.durationS } }
+
+    /// What the night was made of, by the classifier's best label, longest first.
+    var byLabel: [(label: String, display: String, count: Int, seconds: Double)] {
+        var agg: [String: (count: Int, seconds: Double, display: String)] = [:]
+        for e in events {
+            guard let l = e.topLabel else { continue }
+            var cur = agg[l.identifier] ?? (0, 0, l.display)
+            cur.count += 1
+            cur.seconds += e.durationS
+            agg[l.identifier] = cur
+        }
+        return agg.map { (label: $0.key, display: $0.value.display,
+                          count: $0.value.count, seconds: $0.value.seconds) }
+            .sorted { $0.seconds > $1.seconds }
+    }
+
+    var unlabelledEvents: [EventRecord] { events.filter { ($0.labels ?? []).isEmpty } }
     var keptFraction: Double { audio > 0 ? keptAudio / audio : 0 }
 
     /// How much of the session happened while the app was not in the foreground. This is the
