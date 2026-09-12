@@ -9,8 +9,13 @@ struct NightDiagnosticsSection: View {
     @State private var expanded = false
 
     var body: some View {
-        log
-        export
+        // One container, for the same reason as NightCaptureSection: a transition needs a
+        // parent whose layout it can animate against, not two loose views in whatever
+        // stack encloses them.
+        VStack(alignment: .leading, spacing: Layout.section) {
+            log
+            export
+        }
     }
 
     @ViewBuilder
@@ -54,7 +59,7 @@ struct NightDiagnosticsSection: View {
                     .padding(.top, Layout.loose)
             }
             .card()
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .transition(.opacity)
         }
     }
 

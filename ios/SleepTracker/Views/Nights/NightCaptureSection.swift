@@ -14,21 +14,30 @@ struct NightCaptureSection: View {
     @State private var expanded = false
 
     var body: some View {
-        disclosure
-        if expanded {
-            VStack(alignment: .leading, spacing: Layout.section) {
-                Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
-                backgroundEvidence
-                tiles
-                if session.envelope.count > 1 {
-                    SectionHeader("Loudness")
-                    EnvelopeChart(session: session)
-                }
-                eventList
-                NightDiagnosticsSection(session: session)
+        // One container, so the transition has a parent whose layout it can animate against.
+        // Previously `body` returned the header and the block as two loose views, which left
+        // the transition to animate inside whatever VStack happened to enclose it.
+        VStack(alignment: .leading, spacing: Layout.section) {
+            disclosure
+            if expanded {
+                detail
             }
-            .transition(.opacity.combined(with: .move(edge: .top)))
         }
+    }
+
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: Layout.section) {
+            Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
+            backgroundEvidence
+            tiles
+            if session.envelope.count > 1 {
+                SectionHeader("Loudness")
+                EnvelopeChart(session: session)
+            }
+            eventList
+            NightDiagnosticsSection(session: session)
+        }
+        .transition(.opacity)
     }
 
     private var disclosure: some View {

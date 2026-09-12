@@ -46,20 +46,14 @@ struct FavouritesView: View {
     }
 
     private var picker: some View {
-        Picker("Filter", selection: $filter) {
-            ForEach(NightsStore.MarkFilter.allCases) { f in
-                Text(label(for: f)).tag(f)
-            }
-        }
-        .pickerStyle(.segmented)
-    }
-
-    private func label(for f: NightsStore.MarkFilter) -> String {
-        switch f {
-        case .all: "All \(store.markedCount)"
-        case .starred: "★ \(store.starredCount)"
-        case .flagged: "⚑ \(store.flaggedCount)"
-        }
+        SegmentedPills(
+            items: [
+                .init(.all, label: "All \(store.markedCount)"),
+                .init(.starred, symbol: "star.fill", label: "\(store.starredCount)"),
+                .init(.flagged, symbol: "flag.fill", label: "\(store.flaggedCount)")
+            ],
+            selection: $filter
+        )
     }
 
     private var empty: some View {
