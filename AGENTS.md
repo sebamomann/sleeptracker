@@ -13,16 +13,20 @@ Two halves that share one algorithm:
 
 ## Commands
 
-```sh
-npm run check       # tests + all three linters — run before finishing every task
-npm test            # the analysis suite (38 tests)
-npm run lint        # swiftlint --strict, swiftformat --lint, jscpd
-npm run lint:fix    # autocorrect the mechanical half
+`make` is the front door for both halves; `make help` lists everything.
 
-cd ios && xcodegen generate       # after adding/moving any Swift file
+```sh
+make check      # lint + test + dupes + build — run before finishing every task
+make fix        # autocorrect the mechanical half
+make project    # regenerate the Xcode project after adding/moving any Swift file
+make tools      # install the Swift toolchain, and warn if it drifts from CI
 ```
 
-One-time: `brew install swiftlint swiftformat xcodegen`. jscpd runs via `npx`.
+`npm test` still runs the analysis suite directly; `package.json` covers the JS half only.
+Neither half's package manager is in charge of the other.
+
+SwiftLint also runs as an Xcode **build phase**, so violations appear as warnings beside the
+code on every ⌘B — non-strict there, strict in CI.
 
 ## Structure
 
@@ -93,6 +97,10 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 
 ## Tooling traps
 
+- **Tool versions must move together.** `SWIFTLINT_VERSION` in the `Makefile` and the image
+  tag in the `Jenkinsfile` are the same number, and `make tools` warns when the local
+  install drifts. This was `swiftlint:latest` in CI, which meant an upstream release could
+  fail a build containing no change of ours.
 - **jscpd does not scan Swift by default.** `format` in `.jscpd.json` must list `swift`
   explicitly, or all 43 files are skipped while the report still reads `0 clones`.
 - **SwiftFormat's `modifierOrder` is disabled** because SwiftLint wants the opposite order
@@ -116,8 +124,7 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 ## Definition of done
 
 1. Gate or analysis change? `public/analysis.js` + a test first, then port to Swift.
-2. Added or moved a Swift file? `cd ios && xcodegen generate`.
-3. `npm run check` — 0 violations, 0 clones, all tests passing.
-4. Build it: `xcodebuild … CODE_SIGNING_ALLOWED=NO build` must succeed.
-5. Say plainly what was **not** verified. On-device behaviour, classifier accuracy on real
+2. Added or moved a Swift file? `make project`.
+3. `make check` — 0 violations, 0 clones, all tests passing, unsigned build succeeds.
+4. Say plainly what was **not** verified. On-device behaviour, classifier accuracy on real
    bedroom audio, and anything needing signing cannot be checked from a terminal.

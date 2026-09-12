@@ -31,7 +31,9 @@ No dependencies, no build step.
 ## Local
 
 ```sh
-npm test              # the analysis suite
+make help             # every target
+make check            # lint + test + dupes + iOS build
+
 npm start             # http://localhost:3000 — a secure context, so the mic works
 npm run dev:https     # https://<your-lan-ip>:8443 — for testing on the phone
 ```

@@ -6,3 +6,4 @@ ios/build/
 ios/SleepTracker.xcodeproj/
 ios/SleepTracker/Info.plist
 reports/
+build/

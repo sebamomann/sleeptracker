@@ -99,9 +99,12 @@ tested from a terminal.
 ## Quality gates
 
 ```sh
-npm run check        # tests, then all three linters
-npm run lint:fix     # autocorrect what is mechanical
+make check      # lint + test + dupes + unsigned build
+make fix        # autocorrect what is mechanical
+make tools      # install swiftlint, swiftformat, xcodegen
 ```
+
+SwiftLint also runs as an Xcode build phase, so violations show up inline on ⌘B.
 
 | Tool | Catches | Config |
 |---|---|---|
@@ -119,7 +122,9 @@ All three run in CI and fail the build. Two things worth knowing if you touch th
 - `modifierOrder` is disabled in SwiftFormat because SwiftLint wants the opposite order, and
   with both enabled each run undid the other. One tool per concern.
 
-Install the Swift pair once: `brew install swiftlint swiftformat`. jscpd runs via `npx`.
+`make tools` reads the `Brewfile`. jscpd is the one Node tool here — it is not Swift-native,
+but it is the lightest cross-language copy-paste detector that handles Swift at all, and it
+covers both halves of the repo in one pass. (PMD's CPD is the Java-based alternative.)
 
 ## Audio format
 

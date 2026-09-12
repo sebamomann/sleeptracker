@@ -8,13 +8,7 @@
     "start": "node server.mjs",
     "dev": "node server.mjs",
     "dev:https": "node scripts/dev-https.mjs",
-    "test": "node --test \"tests/*.test.mjs\"",
-    "lint": "npm run lint:swift && npm run lint:format && npm run lint:dupes",
-    "lint:swift": "swiftlint lint --strict --quiet",
-    "lint:format": "swiftformat --lint .",
-    "lint:dupes": "npx --yes jscpd@4 . --config .jscpd.json --reporters console",
-    "lint:fix": "swiftlint --fix --quiet && swiftformat .",
-    "check": "npm test && npm run lint"
+    "test": "node --test \"tests/*.test.mjs\""
   },
   "engines": {
     "node": ">=22"

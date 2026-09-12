@@ -32,6 +32,19 @@ targets:
         # Recording runs with the screen off; there is nothing to see in landscape.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UILaunchScreen: {}
+    preBuildScripts:
+      # Lint on every build, so violations arrive as Xcode warnings next to the code rather
+      # than from a terminal command someone has to remember. Not --strict here: a warning
+      # should not stop you building while you work. CI runs it strictly and does stop.
+      - name: SwiftLint
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$PROJECT_DIR/.."
+          if command -v swiftlint > /dev/null; then
+            swiftlint lint --quiet
+          else
+            echo "warning: swiftlint not installed — run 'make tools' in the repo root"
+          fi
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.sebamomann.sleeptracker

@@ -88,7 +88,7 @@ pipeline {
                                     --name ${lint_container} \\
                                     -w /workspace \\
                                     -e NO_COLOR=1 \\
-                                    ghcr.io/realm/swiftlint:latest \\
+                                    ghcr.io/realm/swiftlint:0.65.1 \\
                                     swiftlint lint --strict --quiet
                                 git archive --format=tar --prefix=workspace/ HEAD \\
                                     ios/SleepTracker .swiftlint.yml \\
