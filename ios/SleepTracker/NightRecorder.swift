@@ -320,6 +320,11 @@ final class NightRecorder: ObservableObject {
             return
         }
 
+        // Ramp the edges: a gated clip starts at an arbitrary sample, so its first and last
+        // values are almost never zero, and that step is audible as a click at both ends.
+        var faded = samples
+        Self.fadeEdges(&faded, rate: Self.sampleRate, ms: 40)
+
         eventCounter += 1
         let index = eventCounter
         let at = nightStart.addingTimeInterval(Double(event.startSample) / Self.sampleRate)
@@ -337,11 +342,11 @@ final class NightRecorder: ObservableObject {
             ]
             let audioFile = try AVAudioFile(forWriting: url, settings: settings)
             guard let buf = AVAudioPCMBuffer(pcmFormat: workFormat,
-                                             frameCapacity: AVAudioFrameCount(samples.count))
+                                             frameCapacity: AVAudioFrameCount(faded.count))
             else { return }
-            buf.frameLength = AVAudioFrameCount(samples.count)
-            samples.withUnsafeBufferPointer { src in
-                buf.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
+            buf.frameLength = AVAudioFrameCount(faded.count)
+            faded.withUnsafeBufferPointer { src in
+                buf.floatChannelData![0].update(from: src.baseAddress!, count: faded.count)
             }
             try audioFile.write(from: buf)
 
@@ -369,6 +374,17 @@ final class NightRecorder: ObservableObject {
     private static let idFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HH-mm"; return f
     }()
+    /// Raised-cosine ramp at both edges, in place. Mirrors `fadeEdges` in `public/wav.js`.
+    private nonisolated static func fadeEdges(_ s: inout [Float], rate: Double, ms: Double) {
+        let n = min(Int(rate * ms / 1000), s.count / 2)
+        guard n >= 1 else { return }
+        for i in 0..<n {
+            let g = Float(0.5 - 0.5 * cos(Double.pi * Double(i) / Double(n)))
+            s[i] *= g
+            s[s.count - 1 - i] *= g
+        }
+    }
+
     /// Used from `processing` when naming an event file, so it cannot be actor-isolated.
     private nonisolated static let timeFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "HHmmss"; return f

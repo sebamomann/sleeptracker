@@ -5,8 +5,8 @@ content; a native app with `UIBackgroundModes: audio` keeps recording. That key 
 Info.plist declaration, **not** a signed entitlement, so none of this needs a paid account.
 
 The gate is a direct port of `public/analysis.js` — same constants, same rolling floor,
-same hysteresis, same warmup rule. Keep the two in step when tuning; the JS side is the one
-with the test suite.
+same hysteresis, same warmup rule, same edge fades. Keep the two in step when tuning; the
+JS side is the one with the test suite, so change and test there first.
 
 | File | What |
 |---|---|

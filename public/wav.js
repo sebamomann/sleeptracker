@@ -29,3 +29,22 @@ export function encodeWav(samples, rate) {
   }
   return buf;
 }
+
+/**
+ * Ramp the first and last `ms` of a clip to silence, in place.
+ *
+ * A gated clip starts and ends at an arbitrary sample, so its first and last values are
+ * almost never zero — and a waveform that jumps straight to a non-zero value is a step
+ * discontinuity, which is heard as a click at both ends of every event. A raised-cosine
+ * ramp removes it without audibly shortening anything.
+ */
+export function fadeEdges(samples, rate, ms = 40) {
+  const n = Math.min(Math.round(rate * ms / 1000), Math.floor(samples.length / 2));
+  if (n < 1) return samples;
+  for (let i = 0; i < n; i++) {
+    const g = 0.5 - 0.5 * Math.cos(Math.PI * i / n);
+    samples[i] *= g;
+    samples[samples.length - 1 - i] *= g;
+  }
+  return samples;
+}

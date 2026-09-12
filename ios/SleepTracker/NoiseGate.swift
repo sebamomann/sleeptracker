@@ -7,12 +7,16 @@ struct GateConfig {
     var frameMS = 20.0
     var gateDB = 12.0           // open this far above the rolling floor
     var openMS = 150.0          // sustained, before an event opens
-    var closeMS = 1500.0        // sustained, before it closes
+    /// Sustained below threshold before the gate closes. Generous on purpose: breathing and
+    /// snoring come in bursts with seconds of quiet between them, and a short hold chops one
+    /// episode into a string of unlistenable fragments.
+    var closeMS = 4000.0
     var floorWindowS = 60       // rolling window for the noise floor
     var floorWarmupS = 10       // ...before which the floor may fall but never rise
     var initialFloorDB = -60.0
-    var preRollS = 2.0
-    var postRollS = 1.0
+    var preRollS = 2.0          // kept before the gate opened — events would start mid-snore
+    var postRollS = 2.0         // ...and after it closed, so the tail is not clipped
+    var fadeMS = 40.0           // ramp at each edge, so a clip has no click at either end
     var maxEnvelopeSeconds = 14 * 3600   // hard cap on retained envelope
 }
 

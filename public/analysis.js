@@ -6,8 +6,14 @@ export const DEFAULTS = {
   FRAME_MS:    20,    // analysis frame length
   GATE_DB:     12,    // open the gate this far above the rolling noise floor
   OPEN_MS:     150,   // sustained above threshold before an event opens
-  CLOSE_MS:    1500,  // sustained below threshold before it closes
-  ROLL_MS:     3000,  // pre-roll + post-roll padding added to each event's size estimate
+  // Sustained below threshold before the gate closes. Generous on purpose: breathing and
+  // snoring come in bursts with seconds of quiet between them, and a short hold chops one
+  // episode into a string of unlistenable fragments. Anything quieter than this for less
+  // than CLOSE_MS stays inside the same event.
+  CLOSE_MS:    4000,
+  PRE_ROLL_MS: 2000,  // kept before the gate opened — otherwise events start mid-snore
+  POST_ROLL_MS: 2000, // ...and after it closed, so the tail is not clipped
+  FADE_MS:      40,   // ramp at each edge, so a clip does not begin and end with a click
   FLOOR_WIN_S: 60,    // rolling window for the noise floor
   FLOOR_WARMUP_S: 10, // ...before which the floor may only fall, never rise
   INITIAL_FLOOR_DB: -60,
@@ -153,7 +159,8 @@ export class NightAnalyser {
 
 /** Total audio the gate would have kept, including pre/post roll. */
 export function keptMs(events, cfg = DEFAULTS) {
-  return events.reduce((a, e) => a + (e.e - e.s) * 1000 + cfg.ROLL_MS, 0);
+  const roll = cfg.PRE_ROLL_MS + cfg.POST_ROLL_MS;
+  return events.reduce((a, e) => a + (e.e - e.s) * 1000 + roll, 0);
 }
 
 /** Opus mono at 24 kbps. */

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise } from '../public/analysis.js';
 import { buildSilentWav } from '../public/silent-audio.js';
+import { fadeEdges } from '../public/wav.js';
 
 const SR = 16000;
 const FRAME_SAMPLES = SR * DEFAULTS.FRAME_MS / 1000;   // 320
@@ -107,7 +108,7 @@ test('storage caps hold on a pathological night', () => {
 
 test('keptMs adds the pre/post roll to every event', () => {
   const ms = keptMs([{ s: 0, e: 5 }, { s: 10, e: 12 }]);
-  assert.equal(ms, 7000 + 2 * DEFAULTS.ROLL_MS);
+  assert.equal(ms, 7000 + 2 * (DEFAULTS.PRE_ROLL_MS + DEFAULTS.POST_ROLL_MS));
 });
 
 /* ── summarise ────────────────────────────────────────────────────────────── */
@@ -233,4 +234,61 @@ test('the floor still converges on the room once the window fills', () => {
   run(a, 5 * 60 * 50, t => (t < 8 ? -26 : -58));
   assert.ok(Math.abs(a.floorDb - -58) <= 2,
     `floor ${a.floorDb} should settle on the room, not the loud opening`);
+});
+
+/* ── edge fades ───────────────────────────────────────────────────────────── */
+
+test('fadeEdges ramps both ends to silence and leaves the middle alone', () => {
+  const rate = 16000, ms = 40;
+  const s = new Float32Array(rate);      // one second of full-scale DC
+  s.fill(1);
+  fadeEdges(s, rate, ms);
+
+  const n = rate * ms / 1000;            // 640 samples
+  assert.ok(Math.abs(s[0]) < 1e-6, 'first sample must be silent');
+  assert.ok(Math.abs(s[s.length - 1]) < 1e-6, 'last sample must be silent');
+  assert.ok(s[Math.floor(n / 2)] > 0.3 && s[Math.floor(n / 2)] < 0.7, 'monotonic ramp in');
+  assert.equal(s[rate / 2], 1, 'the middle is untouched');
+
+  // Monotonic, so the ramp cannot introduce a discontinuity of its own.
+  for (let i = 1; i < n; i++) assert.ok(s[i] >= s[i - 1], `ramp dipped at ${i}`);
+});
+
+test('fadeEdges does not over-fade a clip shorter than two ramps', () => {
+  const s = new Float32Array(100); s.fill(1);
+  fadeEdges(s, 16000, 40);                // 640-sample ramp into a 100-sample clip
+  assert.ok(Math.abs(s[0]) < 1e-6);
+  assert.ok(s.some(v => v > 0.9), 'something must survive in the middle');
+});
+
+test('fadeEdges tolerates a clip too short to ramp at all', () => {
+  const s = new Float32Array(1); s.fill(1);
+  assert.doesNotThrow(() => fadeEdges(s, 16000, 40));
+  assert.equal(s[0], 1);
+});
+
+test('a three-second pause stays inside one event', () => {
+  // The behaviour asked for: breathing and snoring arrive in bursts, and a pause between
+  // them is part of the same episode, not a reason to start a new file.
+  const a = makeAnalyser();
+  // 2 s loud, 3 s quiet, 2 s loud, then a long silence to close it.
+  run(a, 60 * 50, t => {
+    if (t < 2) return -26;
+    if (t < 5) return -58;
+    if (t < 7) return -26;
+    return -58;
+  });
+  assert.equal(a.events.length, 1, 'the 3 s pause must not split the event');
+  assert.ok(a.events[0].e >= 7, `event ended at ${a.events[0].e}s, expected to span to 7s`);
+});
+
+test('a pause longer than the close hold still separates events', () => {
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => {
+    if (t < 2) return -26;
+    if (t < 12) return -58;      // 10 s — well past CLOSE_MS
+    if (t < 14) return -26;
+    return -58;
+  });
+  assert.equal(a.events.length, 2, 'a 10 s gap is two episodes');
 });

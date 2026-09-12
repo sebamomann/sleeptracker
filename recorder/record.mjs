@@ -16,12 +16,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { NightAnalyser, DEFAULTS, keptMs, summarise } from '../public/analysis.js';
-import { encodeWav } from '../public/wav.js';
+import { encodeWav, fadeEdges } from '../public/wav.js';
 import { SampleRing } from './ring.mjs';
 
 const RATE = 16000;             // YAMNet's native rate
-const PRE_ROLL_S = 2;           // without this every event starts mid-snore
-const POST_ROLL_S = 1;
+const PRE_ROLL_S = DEFAULTS.PRE_ROLL_MS / 1000;
+const POST_ROLL_S = DEFAULTS.POST_ROLL_MS / 1000;
 const RING_S = 120;             // history kept so a closed event can still be cut out
 
 const argv = process.argv.slice(2);
@@ -128,7 +128,9 @@ function harvest() {
 
     const at = t0 + from / RATE * 1000;
     const file = `${String(seen).padStart(4, '0')}-${hhmmss(at).replace(/:/g, '')}.wav`;
-    const wav = Buffer.from(encodeWav(pcm, RATE));
+    // Ramp the edges before writing: a gated clip starts at an arbitrary sample, and the
+    // step discontinuity is audible as a click at both ends.
+    const wav = Buffer.from(encodeWav(fadeEdges(pcm, RATE, DEFAULTS.FADE_MS), RATE));
     bytes += wav.length;
     index.push({ i: seen, file, at: new Date(at).toISOString(),
                  startS: ev.s, endS: ev.e, peakDb: ev.peak,
