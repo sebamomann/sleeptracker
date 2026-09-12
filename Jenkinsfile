@@ -113,7 +113,7 @@ pipeline {
 
                     # The page and its analysis module must both be served — a broken COPY in
                     # the Dockerfile still passes a health check that only touches the server.
-                    for path in / /analysis.js /manifest.webmanifest; do
+                    for path in / /analysis.js /silent-audio.js /manifest.webmanifest; do
                         docker exec ${smoke_container} wget -qO- "http://127.0.0.1:3000\$path" > /dev/null 2>&1 \\
                             || { echo "Missing asset: \$path"; exit 1; }
                     done

@@ -147,12 +147,14 @@
 
 <script type="module">
 import { NightAnalyser, DEFAULTS, keptMs, megabytesFor, median, summarise } from './analysis.js';
+import { silentWavUrl } from './silent-audio.js';
 
 const $ = s => document.querySelector(s);
 const KEY = 'sleeptracker.spike.v3';
 
 let A = null, S = null, ctx = null, node = null, stream = null,
-    wakeLock = null, silentEl = null, uiTimer = null, saveTimer = null;
+    wakeLock = null, silentEl = null, uiTimer = null, saveTimer = null,
+    keepAliveMark = null;
 
 /* ── formatting ───────────────────────────────────────────────────────────── */
 const hhmm   = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
@@ -228,8 +230,24 @@ document.addEventListener('visibilitychange', async () => {
   if (!S || S.ended) return;
   mark('visibility: ' + document.visibilityState);
   if (document.visibilityState === 'hidden') {
-    save();                     // the phone is probably being locked right now
+    // The phone is probably being locked right now. Note where the keep-alive track had
+    // got to: if its currentTime has advanced when we come back, background playback
+    // survived the very lock that killed capture — which is the whole distinction iOS
+    // draws, measured rather than assumed.
+    if (silentEl) keepAliveMark = { at: Date.now(), t: silentEl.currentTime, paused: silentEl.paused };
+    save();
   } else {
+    if (silentEl && keepAliveMark) {
+      const away = Date.now() - keepAliveMark.at;
+      const advanced = silentEl.currentTime - keepAliveMark.t;
+      // currentTime wraps on every loop, so compare against the loop length, not the gap.
+      const looped = advanced < 0 || silentEl.currentTime < keepAliveMark.t;
+      mark(`keep-alive after ${Math.round(away/1000)}s away: ` +
+           `${silentEl.paused ? 'PAUSED by the OS' : 'still playing'}` +
+           `${looped ? ', track looped (playback continued)' : `, advanced ${advanced.toFixed(1)}s`}`);
+      keepAliveMark = null;
+    }
+    if (ctx && ctx.state === 'suspended') { try { await ctx.resume(); mark('context resumed'); } catch {} }
     // Coming back from a lock. The context may have been suspended under us.
     if (ctx && ctx.state === 'suspended') { try { await ctx.resume(); mark('context resumed'); } catch {} }
     if (S.profile === 'screenon') acquireWakeLock();
@@ -252,8 +270,11 @@ function startKeepAlive(){
   // A silent looping WAV plus media-session metadata. On Android this promotes the page
   // to an active media session, which is the thing that survives a screen lock. It also
   // puts a stop control on the lock screen.
-  silentEl = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
-  silentEl.loop = true; silentEl.volume = 0;
+  silentEl = new Audio(silentWavUrl({ seconds: 1, rate: 8000 }));
+  silentEl.loop = true;
+  silentEl.playsInline = true;
+  // volume is left at 1 on purpose: the track is -90 dBFS, so it is inaudible on its own
+  // merits. Turning it down, or muting it, is what makes the OS discount it as playback.
   silentEl.play().then(() => mark('keep-alive playing'))
                  .catch(e => mark('KEEP-ALIVE NEVER STARTED: ' + e.name +
                    ' — this run does not test the keep-alive profile'));
@@ -289,6 +310,7 @@ async function start(){
     });
   } catch (e) {
     $('#err').textContent = `Microphone unavailable (${e.name}). Needs HTTPS and mic permission.`;
+    try { silentEl?.pause(); silentEl = null; } catch {}
     return;
   }
 

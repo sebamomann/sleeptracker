@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise } from '../public/analysis.js';
+import { buildSilentWav } from '../public/silent-audio.js';
 
 const SR = 16000;
 const FRAME_SAMPLES = SR * DEFAULTS.FRAME_MS / 1000;   // 320
@@ -176,4 +177,39 @@ test('summarise: tolerates a legacy session with no lastFrameAt', () => {
   assert.equal(r.stoppedAt, null);
   assert.equal(r.diedAndStayedDead, false);
   assert.ok(Math.abs(r.wall - 600_000) < 1000);
+});
+
+/* ── the keep-alive carrier ───────────────────────────────────────────────── */
+
+test('buildSilentWav produces a real, playable, non-silent track', () => {
+  const b = Buffer.from(buildSilentWav({ seconds: 1, rate: 8000 }));
+
+  assert.equal(b.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(b.toString('ascii', 8, 12), 'WAVE');
+  assert.equal(b.toString('ascii', 36, 40), 'data');
+  assert.equal(b.readUInt32LE(4), b.length - 8, 'RIFF size must cover everything after it');
+
+  const rate = b.readUInt32LE(24), dataBytes = b.readUInt32LE(40);
+  assert.equal(rate, 8000);
+  assert.equal(b.readUInt16LE(34), 16, '16-bit samples');
+  assert.equal(dataBytes, b.length - 44);
+
+  // The regression: a zero-length track is not playback, and iOS will not keep a page
+  // alive for one. This is what shipped first and silently invalidated the profile.
+  assert.ok(dataBytes > 0, 'must contain actual samples');
+  assert.equal(dataBytes / 2 / rate, 1, 'one second long');
+
+  // ...and it must not be digital silence, which is equally disqualifying.
+  let nonZero = 0;
+  for (let i = 44; i < b.length; i += 2) if (b.readInt16LE(i) !== 0) nonZero++;
+  assert.equal(nonZero, dataBytes / 2, 'every sample is non-zero');
+
+  let peak = 0;
+  for (let i = 44; i < b.length; i += 2) peak = Math.max(peak, Math.abs(b.readInt16LE(i)));
+  assert.equal(peak, 1, 'one LSB — -90 dBFS, inaudible but not silent');
+});
+
+test('buildSilentWav honours its duration', () => {
+  const b = Buffer.from(buildSilentWav({ seconds: 0.5, rate: 16000 }));
+  assert.equal(b.readUInt32LE(40) / 2 / 16000, 0.5);
 });
