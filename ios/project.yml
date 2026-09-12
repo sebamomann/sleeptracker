@@ -1,0 +1,25 @@
+# XcodeGen spec — `brew install xcodegen && cd ios && xcodegen generate`, then open
+# SleepTracker.xcodeproj. Creating the project by hand in Xcode works equally well; see
+# ios/README.md. Nothing here needs a paid account.
+name: SleepTracker
+options:
+  bundleIdPrefix: de.sebamomann
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  SleepTracker:
+    type: application
+    platform: iOS
+    sources: [SleepTracker]
+    info:
+      path: SleepTracker/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.sebamomann.sleeptracker
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        # Leave the team empty here and pick your personal Apple ID in Xcode under
+        # Signing & Capabilities → Team. Automatic signing handles the rest.
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"

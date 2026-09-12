@@ -15,6 +15,7 @@ answers are needed before any of the rest is worth building.
 | `public/analysis.js` | Noise floor, gate and gap detection. Pure, no DOM, injected clock |
 | `tests/analysis.test.mjs` | Tests for the above, incl. simulated OS suspensions |
 | `public/wav.js` | 16-bit PCM WAV encoder, shared by the browser and the recorder |
+| `ios/` | The iOS recorder — `UIBackgroundModes: audio`, gate ported from `analysis.js` |
 | `recorder/record.mjs` | Bedside recorder — captures, gates, writes one WAV per event |
 | `recorder/ring.mjs` | Rolling PCM history, so a closed event can still be cut out |
 | `server.mjs` | Production server: static files + `/api/health`. Stdlib only |
