@@ -24,6 +24,11 @@ targets:
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: >-
           Records the sounds of your night so they can be reviewed in the morning.
+        # On-device only: the recogniser is asked for requiresOnDeviceRecognition, so no
+        # audio is uploaded to Apple.
+        NSSpeechRecognitionUsageDescription: >-
+          Transcribes sleep talking on this device, so you can read what you said. No audio
+          leaves your phone.
         # Recording runs with the screen off; there is nothing to see in landscape.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UILaunchScreen: {}

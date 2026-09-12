@@ -15,6 +15,13 @@ struct NightSession: Codable, Identifiable {
         var id: String { "\(at)-\(what)" }
     }
 
+    struct QuietGap: Codable, Hashable, Identifiable {
+        var startS: Double
+        var endS: Double
+        var durationS: Double
+        var id: Double { startS }
+    }
+
     struct EventRecord: Codable, Hashable, Identifiable {
         var index: Int
         var file: String        // relative to the night's events/ directory
@@ -26,7 +33,13 @@ struct NightSession: Codable, Identifiable {
         /// Top labels from the on-device classifier, most confident first. Nil for events
         /// recorded before classification existed, or when the classifier is unavailable.
         var labels: [SoundLabel]?
+        /// On-device transcript, for events the classifier called speech. Nil when nothing
+        /// intelligible came back, which is common — sleep speech is often mumbled.
+        var transcript: String?
         var topLabel: SoundLabel? { labels?.first }
+        var isSpeech: Bool {
+            (labels ?? []).contains { $0.identifier.lowercased().contains("speech") }
+        }
         var id: Int { index }
         var at: Date { Date(timeIntervalSince1970: atMs / 1000) }
     }
@@ -55,6 +68,8 @@ struct NightSession: Codable, Identifiable {
     /// Every label this device's classifier can produce, recorded once so the available set
     /// is documented rather than assumed.
     var knownLabels: [String]?
+    /// Near-silent stretches bracketed by sound. Computed at stop; see QuietGaps.
+    var quietGaps: [QuietGap]?
     /// Wall clock of the most recent audio callback. The only record of when capture
     /// stopped, if it stopped and never resumed.
     var lastFrameAtMs: Double?
@@ -104,6 +119,43 @@ extension NightSession {
     }
 
     var unlabelledEvents: [EventRecord] { events.filter { ($0.labels ?? []).isEmpty } }
+
+    /// Speech events still waiting on a transcript.
+    var untranscribedSpeech: [EventRecord] {
+        events.filter { $0.isSpeech && $0.transcript == nil }
+    }
+
+    var notableEvents: [EventRecord] { events.filter(Highlights.isNotable) }
+
+    /// Total time spent on anything the classifier called snoring.
+    var snoringSeconds: Double {
+        events.filter { ($0.topLabel?.identifier.lowercased().contains("snor")) == true }
+              .reduce(0) { $0 + $1.durationS }
+    }
+
+    /// The night in hour-sized pieces — answers "when was it bad", which a flat event list
+    /// cannot. Loudness alone would be dominated by one door slam, so this carries both how
+    /// much happened and how loud it got.
+    struct HourBucket: Identifiable {
+        var start: Date
+        var events: Int
+        var seconds: Double
+        var peakDb: Double
+        var id: Date { start }
+    }
+
+    var byHour: [HourBucket] {
+        guard wall > 0 else { return [] }
+        let hours = max(1, Int(ceil(wall / 3600)))
+        return (0..<hours).map { h in
+            let from = Double(h) * 3600, to = from + 3600
+            let inBucket = events.filter { $0.startS >= from && $0.startS < to }
+            return HourBucket(start: start.addingTimeInterval(from),
+                              events: inBucket.count,
+                              seconds: inBucket.reduce(0) { $0 + $1.durationS },
+                              peakDb: inBucket.map(\.peakDb).max() ?? -100)
+        }
+    }
     var keptFraction: Double { audio > 0 ? keptAudio / audio : 0 }
 
     /// How much of the session happened while the app was not in the foreground. This is the

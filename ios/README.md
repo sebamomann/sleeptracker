@@ -13,7 +13,13 @@ JS side is the one with the test suite, so change and test there first.
 | `NoiseGate.swift` | Rolling noise floor + hysteresis gate. Port of `analysis.js` |
 | `SampleRing.swift` | Circular PCM history, so a closed event can still be cut out |
 | `NightRecorder.swift` | `AVAudioEngine` tap, session handling, WAV writing |
-| `ContentView.swift` | Start/stop, dim red night screen, event list |
+| `EventClassifier.swift` | On-device sound labels via SoundAnalysis (~300 classes) |
+| `Transcriber.swift` | On-device speech-to-text for speech events, `requiresOnDeviceRecognition` |
+| `QuietGaps.swift` | Near-silence bracketed by sound. Port of `findQuietGaps` |
+| `Highlights.swift` | Variety-first ranking of what is worth hearing |
+| `SessionStore.swift` · `NightSession.swift` | Nights on disk, and the derived verdict |
+| `SessionDetailView.swift` + `HighlightReelView` + `HourStripView` + `EnvelopeChart` | The morning report |
+| `ContentView.swift` | Start/stop, night list, bedtime reminder |
 
 ## Build it (free Apple ID, no payment)
 
@@ -87,9 +93,21 @@ on a free personal team and the rest of the roadmap is unblocked. If it does not
 before spending more time — that is the one assumption in this plan that could not be
 tested from a terminal.
 
+## Audio format
+
+Events are AAC in `.m4a` at 32 kbps mono — roughly a tenth the size of the WAVs this
+originally wrote, and ample for 16 kHz speech and snoring. **Not Opus**, despite Opus being
+the better codec on paper: on iOS it means a CAF container nothing outside Apple's stack
+will open, while `.m4a` plays everywhere and is read natively by both the classifier and
+the transcriber.
+
+## Everything is local
+
+No networking code exists in this target. Audio, labels and transcripts stay in the app's
+Documents directory. Transcription sets `requiresOnDeviceRecognition`, so not even Apple's
+speech servers see it.
+
 ## Next
 
-- Re-encode events to Opus at 24 kbps (~10× smaller than the WAVs written now)
-- Classify on-device with **SoundAnalysis** (`SNClassifySoundRequest` ships a ~300-sound
-  classifier including snoring) — no server, no YAMNet, no paid account
-- Upload events to the deployed web app, which becomes the viewer and history
+- Retention: prune nights automatically once there are enough to be worth pruning
+- Upload to the deployed web app, if a big-screen viewer ever beats the phone

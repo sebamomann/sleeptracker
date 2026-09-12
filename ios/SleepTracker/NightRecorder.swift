@@ -82,6 +82,13 @@ final class NightRecorder: ObservableObject {
         s.marks.append(.init(at: s.t0, what: classifier.isAvailable
             ? "classifier ready, \(classifier.knownLabels.count) labels"
             : "CLASSIFIER UNAVAILABLE"))
+        // Recorded up front: "nothing was transcribed" is not a useful thing to discover in
+        // the morning without knowing why.
+        if let why = Transcriber.shared.unavailableReason {
+            s.marks.append(.init(at: s.t0, what: "TRANSCRIPTION UNAVAILABLE: \(why)"))
+        } else {
+            s.marks.append(.init(at: s.t0, what: "on-device transcription ready"))
+        }
         session = s
 
         processing.sync {
@@ -100,6 +107,8 @@ final class NightRecorder: ObservableObject {
             try startEngine()
             observeLifecycle()
             isRecording = true
+            // Tonight is covered; the next nudge belongs to tomorrow.
+            StartReminder.reschedule(skippingTonight: true)
             saveTimer = Timer.scheduledTimer(withTimeInterval: saveEvery, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.persist() }
             }
@@ -123,9 +132,19 @@ final class NightRecorder: ObservableObject {
         mark("stopped")
         session?.ended = true
         session?.endedAt = Date()
-        persist()
+        persist()                       // refreshes the envelope the gap search needs
+
+        if var s = session {
+            s.quietGaps = QuietGaps.find(in: s)
+            if !(s.quietGaps ?? []).isEmpty {
+                mark("\((s.quietGaps ?? []).count) quiet gaps inside episodes")
+            }
+            session = s
+            try? store.save(s)
+        }
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        StartReminder.reschedule()
     }
 
     // MARK: - Diagnostics
@@ -356,17 +375,19 @@ final class NightRecorder: ObservableObject {
         // values are almost never zero, and that step is audible as a click at both ends.
         var faded = samples
         Self.fadeEdges(&faded, rate: Self.sampleRate, ms: 40)
-        let file = String(format: "%04d-%@.wav", index, Self.timeFormatter.string(from: at))
+        // AAC in m4a rather than WAV: roughly a tenth the size at 32 kbps mono, which is
+        // ample for 16 kHz speech and snoring. Not Opus — on iOS that means a CAF container
+        // nothing outside Apple's stack will open, whereas m4a plays everywhere and is read
+        // natively by both the classifier and the transcriber.
+        let file = String(format: "%04d-%@.m4a", index, Self.timeFormatter.string(from: at))
         let url = SessionStore.shared.eventsDirectory(for: nightID).appendingPathComponent(file)
 
         do {
             let settings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: Self.sampleRate,
                 AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
+                AVEncoderBitRateKey: 32_000,
             ]
             let audioFile = try AVAudioFile(forWriting: url, settings: settings)
             guard let buf = AVAudioPCMBuffer(pcmFormat: workFormat,
@@ -381,6 +402,22 @@ final class NightRecorder: ObservableObject {
             // Classified here, after the file exists — the classifier reads it back rather
             // than taking a buffer, and this queue is free to take its time.
             let labels = EventClassifier.shared.classify(url: url)
+
+            // Transcription is slower and asynchronous, so the event is recorded first and
+            // patched when the text arrives. A speech event with no transcript yet is still
+            // a speech event you can listen to.
+            if labels.contains(where: { $0.identifier.lowercased().contains("speech") }) {
+                Task.detached(priority: .utility) {
+                    guard let text = await Transcriber.shared.transcribe(url: url) else { return }
+                    await MainActor.run { [weak self] in
+                        guard let self, var s = self.session,
+                              let i = s.events.firstIndex(where: { $0.index == index }) else { return }
+                        s.events[i].transcript = text
+                        self.session = s
+                        self.persist()
+                    }
+                }
+            }
 
             let record = NightSession.EventRecord(
                 index: index, file: file,

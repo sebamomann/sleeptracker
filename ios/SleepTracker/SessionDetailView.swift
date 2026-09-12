@@ -5,6 +5,7 @@ struct SessionDetailView: View {
     @StateObject private var player = EventPlayer()
     @State private var showDiagnostics = false
     @State private var classifying = false
+    @State private var showCapture = false
 
     init(session: NightSession) { _session = State(initialValue: session) }
 
@@ -13,16 +14,23 @@ struct SessionDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
-                backgroundEvidence
-                tiles
-                composition
-                if session.envelope.count > 1 {
-                    SectionHeader(text: "The night")
-                    EnvelopeChart(session: session)
+                headline
+
+                SectionHeader(text: "Worth hearing")
+                HighlightReelView(session: session, player: player)
+
+                if session.byHour.count > 1 {
+                    SectionHeader(text: "When")
+                    HourStripView(session: session)
                 }
-                events
-                diagnostics
+
+                concerning
+                composition
+
+                // The recorder's own diagnostics sit below the night itself, and collapsed:
+                // they mattered while the approach was unproven, and now they are only
+                // consulted when something looks wrong.
+                captureSection
                 exportRow
             }
             .padding(16)
@@ -31,6 +39,123 @@ struct SessionDetailView: View {
         .navigationTitle(Self.dayFormatter.string(from: session.startedAt))
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
+    }
+
+    // MARK: - Headline
+
+    private var headline: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(summaryLine)
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(session.wall.short) recorded · \(session.events.count) events · "
+                 + "\(session.keptAudio.short) of audio kept")
+                .font(.caption).foregroundStyle(Theme.textMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var summaryLine: String {
+        var bits: [String] = []
+        if session.snoringSeconds >= 60 {
+            bits.append("Snored \(session.snoringSeconds.short)")
+        }
+        let spoke = session.events.filter { !($0.transcript ?? "").isEmpty }.count
+        if spoke > 0 { bits.append("\(spoke) thing\(spoke == 1 ? "" : "s") you said") }
+        let concern = session.notableEvents.count + (session.quietGaps?.count ?? 0)
+        if concern > 0 { bits.append("\(concern) worth attention") }
+        if bits.isEmpty {
+            bits.append(session.events.isEmpty
+                        ? "A quiet night"
+                        : "\(session.events.count) sounds, nothing notable")
+        }
+        return bits.joined(separator: " · ")
+    }
+
+    // MARK: - Worth attention
+
+    @ViewBuilder
+    private var concerning: some View {
+        let notable = session.notableEvents
+        let gaps = (session.quietGaps ?? []).sorted { $0.durationS > $1.durationS }
+
+        if !notable.isEmpty || !gaps.isEmpty {
+            SectionHeader(text: "Worth attention")
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(notable) { e in
+                    Button {
+                        player.toggle(url: store.url(forEvent: e, in: session.id), index: e.index)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: player.playingIndex == e.index
+                                  ? "stop.circle.fill" : "play.circle")
+                                .foregroundStyle(Theme.gap)
+                            Text(e.topLabel?.display ?? "Unusual sound")
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Text(Self.secondsFormatter.string(from: e.at))
+                                .font(.caption2.monospaced()).foregroundStyle(Theme.textMuted)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ForEach(gaps) { g in
+                    HStack(spacing: 10) {
+                        Image(systemName: "pause.circle").foregroundStyle(Theme.gap)
+                        Text("\(Int(g.durationS))s with no breathing sound")
+                            .font(.caption.weight(.medium))
+                        Spacer()
+                        Text(Self.secondsFormatter.string(
+                            from: session.start.addingTimeInterval(g.startS)))
+                            .font(.caption2.monospaced()).foregroundStyle(Theme.textMuted)
+                    }
+                }
+
+                Text("A personal observation tool, not a medical assessment. A fan, rolling "
+                     + "over, or simply breathing quietly all look like a pause from here.")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
+        }
+    }
+
+    // MARK: - Capture diagnostics, collapsed
+
+    @ViewBuilder
+    private var captureSection: some View {
+        Button { showCapture.toggle() } label: {
+            HStack {
+                Text("Recording detail").font(.subheadline.weight(.semibold))
+                if !session.survived && !session.tooShort {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(Theme.gap)
+                }
+                Spacer()
+                Image(systemName: showCapture ? "chevron.up" : "chevron.down").font(.caption)
+            }
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.top, 8)
+        }
+        .buttonStyle(.plain)
+
+        if showCapture {
+            Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
+            backgroundEvidence
+            tiles
+            if session.envelope.count > 1 {
+                SectionHeader(text: "Loudness")
+                EnvelopeChart(session: session)
+            }
+            events
+            diagnostics
+        }
     }
 
     // MARK: - The point of the whole exercise

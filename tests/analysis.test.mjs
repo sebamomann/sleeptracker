@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise } from '../public/analysis.js';
+import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise, findQuietGaps } from '../public/analysis.js';
 import { buildSilentWav } from '../public/silent-audio.js';
 import { fadeEdges } from '../public/wav.js';
 
@@ -291,4 +291,74 @@ test('a pause longer than the close hold still separates events', () => {
     return -58;
   });
   assert.equal(a.events.length, 2, 'a 10 s gap is two episodes');
+});
+
+/* ── quiet gaps ───────────────────────────────────────────────────────────── */
+
+/** Build an envelope where `loud` ranges are at -25 dB and everything else at -60. */
+function envelopeWith(seconds, loudRanges) {
+  return Array.from({ length: seconds }, (_, i) => {
+    const loud = loudRanges.some(([a, b]) => i >= a && i < b);
+    return loud ? [-30, -25, -32] : [-60, -59, -61];
+  });
+}
+
+test('a pause inside an ongoing episode is flagged', () => {
+  // Snoring, 15 s of near-silence, snoring again.
+  const envelope = envelopeWith(120, [[0, 20], [35, 55]]);
+  const events = [{ s: 0, e: 20 }, { s: 35, e: 55 }];
+  const gaps = findQuietGaps({ envelope, events, floorDb: -61 });
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0].startS, 20);
+  assert.equal(gaps[0].durationS, 15);
+});
+
+test('a quiet night produces no gaps at all', () => {
+  // The failure mode that makes naive silence detection useless: eight hours of quiet
+  // would otherwise be one enormous "pause", or thousands of them.
+  const envelope = envelopeWith(600, []);
+  const gaps = findQuietGaps({ envelope, events: [], floorDb: -61 });
+  assert.equal(gaps.length, 0);
+});
+
+test('silence after the last sound is not a pause', () => {
+  // Nothing resumed, so nothing paused — the episode simply ended.
+  const envelope = envelopeWith(200, [[0, 20]]);
+  const events = [{ s: 0, e: 20 }];
+  assert.equal(findQuietGaps({ envelope, events, floorDb: -61 }).length, 0);
+});
+
+test('an ordinary pause between breaths is too short to flag', () => {
+  const envelope = envelopeWith(120, [[0, 20], [25, 45]]);   // 5 s gap
+  const events = [{ s: 0, e: 20 }, { s: 25, e: 45 }];
+  assert.equal(findQuietGaps({ envelope, events, floorDb: -61 }).length, 0);
+});
+
+test('a long quiet stretch between episodes is not a pause', () => {
+  // 100 s of quiet is the room being quiet, not a held breath — and adjacency alone cannot
+  // reject it, since the quiet sits exactly between the two events. Hence GAP_MAX_S.
+  const envelope = envelopeWith(260, [[0, 20], [120, 140]]);
+  const events = [{ s: 0, e: 20 }, { s: 120, e: 140 }];
+  assert.equal(findQuietGaps({ envelope, events, floorDb: -61 }).length, 0);
+});
+
+test('a pause at the very edge of plausible is still reported', () => {
+  const envelope = envelopeWith(200, [[0, 20], [100, 120]]);   // 80 s, under GAP_MAX_S
+  const events = [{ s: 0, e: 20 }, { s: 100, e: 120 }];
+  const gaps = findQuietGaps({ envelope, events, floorDb: -61 });
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0].durationS, 80);
+});
+
+test('several pauses in one episode are all found', () => {
+  const envelope = envelopeWith(200, [[0, 10], [25, 35], [50, 60], [75, 85]]);
+  const events = [{ s: 0, e: 10 }, { s: 25, e: 35 }, { s: 50, e: 60 }, { s: 75, e: 85 }];
+  const gaps = findQuietGaps({ envelope, events, floorDb: -61 });
+  assert.equal(gaps.length, 3);
+  assert.deepEqual(gaps.map(g => g.durationS), [15, 15, 15]);
+});
+
+test('findQuietGaps tolerates missing input', () => {
+  assert.deepEqual(findQuietGaps({ envelope: [], events: [], floorDb: -60 }), []);
+  assert.deepEqual(findQuietGaps({}), []);
 });

@@ -19,6 +19,18 @@ export const DEFAULTS = {
   INITIAL_FLOOR_DB: -60,
   MAX_HOURS:   14,    // hard cap on stored envelope length
   MAX_EVENTS:  5000,
+
+  // Quiet-gap detection: stretches of near-silence *inside* an otherwise noisy episode.
+  // Deliberately not "the room went quiet" — that is most of a normal night. A gap only
+  // counts when sound brackets it on both sides, which is what makes it a pause in
+  // something rather than the absence of anything.
+  GAP_MIN_S:      10,   // shorter than this is an ordinary pause between breaths
+  GAP_MAX_S:      90,   // longer than this is not a pause in anything, just a quiet room
+  GAP_MARGIN_DB:  4,    // within this much of the floor counts as quiet
+  GAP_ADJOIN_S:   5,    // sound must stop this close to the start, and resume this close
+                        // to the end — the quiet has to BE the interruption, not merely
+                        // sit somewhere between two distant episodes
+
   STALL_MS:    700,   // a message gap longer than this is recorded
   LOST_MS:     300,   // ...and counts as real dead time past this much missing audio
 };
@@ -197,4 +209,52 @@ export function summarise(s, cfg = DEFAULTS) {
 
   return { t0, endAt, wall, audioMs, deadMs, realGaps, worstGapMs,
            stoppedAt, trailingDeadMs, diedAndStayedDead, tooShort, survived };
+}
+
+/**
+ * Near-silent stretches bracketed by sound — pauses in an ongoing episode.
+ *
+ * This is the inverse of the gate: it looks for the ABSENCE of sound, which needs different
+ * rules. Plain silence is uninformative (most of a quiet night is silence), so a run only
+ * qualifies when the surrounding `GAP_CONTEXT_S` contains real events on BOTH sides. That
+ * turns "the room is quiet" into "something was happening, then stopped, then resumed".
+ *
+ * Takes the per-second envelope and the event list; returns offsets in seconds.
+ *
+ * This is an observational signal, not a diagnosis — a fan, rolling over, or simply
+ * breathing quietly all look the same from here.
+ */
+export function findQuietGaps({ envelope, events, floorDb }, cfg = DEFAULTS) {
+  if (!envelope?.length || !events?.length) return [];
+
+  const quietBelow = floorDb + cfg.GAP_MARGIN_DB;
+  const gaps = [];
+  let runStart = null;
+
+  const closeRun = end => {
+    if (runStart === null) return;
+    const length = end - runStart;
+    // An upper bound is what separates a pause from plain quiet. Without it, the hours
+    // between the last snore of one episode and the first of the next qualify: the gap IS
+    // the space between two events, so adjacency alone can never rule it out.
+    if (length >= cfg.GAP_MIN_S && length <= cfg.GAP_MAX_S) {
+      const stopped = events.some(e => Math.abs(e.e - runStart) <= cfg.GAP_ADJOIN_S);
+      const resumed = events.some(e => Math.abs(e.s - end) <= cfg.GAP_ADJOIN_S);
+      if (stopped && resumed) {
+        gaps.push({ startS: runStart, endS: end, durationS: length });
+      }
+    }
+    runStart = null;
+  };
+
+  for (let i = 0; i < envelope.length; i++) {
+    const peak = envelope[i][1];
+    if (peak < quietBelow) {
+      if (runStart === null) runStart = i;
+    } else {
+      closeRun(i);
+    }
+  }
+  closeRun(envelope.length);
+  return gaps;
 }
