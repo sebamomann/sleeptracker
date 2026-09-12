@@ -1,15 +1,29 @@
 import SwiftUI
 
 struct SessionDetailView: View {
-    @State private var session: NightSession
+    /// Resolved from the store on every render rather than copied into @State: the same
+    /// night is reachable from the night list and from favourites, and a star set in one
+    /// place has to be visible in the other.
+    private let fallback: NightSession
+    @ObservedObject var store: NightsStore
     @StateObject private var player = EventPlayer()
     @State private var showDiagnostics = false
     @State private var classifying = false
     @State private var showCapture = false
+    @State private var editing: PendingNote?
 
-    init(session: NightSession) { _session = State(initialValue: session) }
+    init(session: NightSession, store: NightsStore) {
+        self.fallback = session
+        self.store = store
+    }
 
-    private var store: SessionStore { .shared }
+    private var session: NightSession { store.session(id: fallback.id) ?? fallback }
+    private var files: SessionStore { .shared }
+
+    private struct PendingNote: Identifiable {
+        let event: NightSession.EventRecord
+        var id: Int { event.index }
+    }
 
     var body: some View {
         ScrollView {
@@ -17,7 +31,11 @@ struct SessionDetailView: View {
                 headline
 
                 SectionHeader(text: "Worth hearing")
-                HighlightReelView(session: session, player: player)
+                HighlightReelView(session: session, player: player, store: store) { e in
+                    editing = PendingNote(event: e)
+                }
+
+                marked
 
                 if session.byHour.count > 1 {
                     SectionHeader(text: "When")
@@ -36,6 +54,9 @@ struct SessionDetailView: View {
             .padding(16)
         }
         .background(Theme.surface0)
+        .sheet(item: $editing) { p in
+            NoteEditor(event: p.event, sessionID: session.id, store: store)
+        }
         .navigationTitle(Self.dayFormatter.string(from: session.startedAt))
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
@@ -72,6 +93,26 @@ struct SessionDetailView: View {
         return bits.joined(separator: " · ")
     }
 
+    // MARK: - Marked in this night
+
+    @ViewBuilder
+    private var marked: some View {
+        let items = session.markedEvents
+        if !items.isEmpty {
+            SectionHeader(text: "Marked (\(items.count))")
+            VStack(spacing: 0) {
+                ForEach(items) { e in
+                    EventRow(event: e, sessionID: session.id, player: player, store: store) { ev in
+                        editing = PendingNote(event: ev)
+                    }
+                    if e.index != items.last?.index { Divider().overlay(Theme.line) }
+                }
+            }
+            .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
+        }
+    }
+
     // MARK: - Worth attention
 
     @ViewBuilder
@@ -84,7 +125,7 @@ struct SessionDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(notable) { e in
                     Button {
-                        player.toggle(url: store.url(forEvent: e, in: session.id), index: e.index)
+                        player.toggle(url: files.url(forEvent: e, in: session.id), index: e.index)
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: player.playingIndex == e.index
@@ -255,27 +296,26 @@ struct SessionDetailView: View {
     private func classifyMissing(_ pending: [NightSession.EventRecord]) {
         classifying = true
         let id = session.id
-        let store = self.store
+        let files = self.files
+        let nights = self.store
         Task.detached(priority: .utility) {
             var labelled: [Int: [SoundLabel]] = [:]
             for e in pending {
-                let url = store.url(forEvent: e, in: id)
-                let labels = EventClassifier.shared.classify(url: url)
+                let labels = EventClassifier.shared.classify(url: files.url(forEvent: e, in: id))
                 if !labels.isEmpty { labelled[e.index] = labels }
             }
             // Frozen before crossing to the main actor: a var captured by a concurrently
             // executing closure is a data race, and an error under Swift 6.
             let results = labelled
             await MainActor.run {
-                for (index, labels) in results {
-                    if let i = session.events.firstIndex(where: { $0.index == index }) {
-                        session.events[i].labels = labels
+                nights.update(id: id) { s in
+                    for (index, labels) in results {
+                        if let i = s.events.firstIndex(where: { $0.index == index }) {
+                            s.events[i].labels = labels
+                        }
                     }
+                    if s.knownLabels == nil { s.knownLabels = EventClassifier.shared.knownLabels }
                 }
-                if session.knownLabels == nil {
-                    session.knownLabels = EventClassifier.shared.knownLabels
-                }
-                try? store.save(session)
                 classifying = false
             }
         }
@@ -330,44 +370,9 @@ struct SessionDetailView: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(session.events) { e in
-                    Button {
-                        player.toggle(url: store.url(forEvent: e, in: session.id), index: e.index)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: player.playingIndex == e.index
-                                  ? "stop.circle.fill" : "play.circle")
-                                .font(.title3)
-                                .foregroundStyle(Theme.event)
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 7) {
-                                    Text(Self.secondsFormatter.string(from: e.at))
-                                        .font(.callout.monospaced())
-                                        .foregroundStyle(Theme.textPrimary)
-                                    if let l = e.topLabel {
-                                        Text(l.display)
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(Theme.signal)
-                                        Text("\(Int(l.confidence * 100))%")
-                                            .font(.caption2.monospaced())
-                                            .foregroundStyle(Theme.textMuted)
-                                    }
-                                }
-                                Text("\(String(format: "%.1f", e.durationS))s · peak \(Int(e.peakDb)) dB")
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(Theme.textMuted)
-                            }
-                            Spacer()
-                            if session.backgroundEvents.contains(e) {
-                                Text("locked")
-                                    .font(.caption2.weight(.medium))
-                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(Theme.event.opacity(0.18), in: Capsule())
-                                    .foregroundStyle(Theme.event)
-                            }
-                        }
-                        .padding(.vertical, 9).padding(.horizontal, 12)
+                    EventRow(event: e, sessionID: session.id, player: player, store: store) { ev in
+                        editing = PendingNote(event: ev)
                     }
-                    .buttonStyle(.plain)
                     if e.index != session.events.last?.index {
                         Divider().overlay(Theme.line)
                     }
@@ -423,14 +428,14 @@ struct SessionDetailView: View {
     }
 
     private var exportRow: some View {
-        let json = store.directory(for: session.id).appendingPathComponent("session.json")
+        let json = files.directory(for: session.id).appendingPathComponent("session.json")
         return HStack(spacing: 10) {
             ShareLink(item: json) {
                 Label("Share session.json", systemImage: "square.and.arrow.up")
                     .font(.subheadline)
             }
             Spacer()
-            Text(ByteCountFormatter.string(fromByteCount: store.bytes(of: session.id),
+            Text(ByteCountFormatter.string(fromByteCount: files.bytes(of: session.id),
                                             countStyle: .file))
                 .font(.caption.monospaced()).foregroundStyle(Theme.textMuted)
         }

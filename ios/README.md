@@ -18,8 +18,11 @@ JS side is the one with the test suite, so change and test there first.
 | `QuietGaps.swift` | Near-silence bracketed by sound. Port of `findQuietGaps` |
 | `Highlights.swift` | Variety-first ranking of what is worth hearing |
 | `SessionStore.swift` · `NightSession.swift` | Nights on disk, and the derived verdict |
+| `NightsStore.swift` | The loaded nights, and the only place marks and notes are mutated |
+| `EventRow.swift` | One event, shared by the night list, the reel and favourites |
+| `FavouritesView.swift` | Stars and flags across every night, grouped by date |
 | `SessionDetailView.swift` + `HighlightReelView` + `HourStripView` + `EnvelopeChart` | The morning report |
-| `ContentView.swift` | Start/stop, night list, bedtime reminder |
+| `ContentView.swift` | Tab bar: Record, Nights, Favourites |
 
 ## Build it (free Apple ID, no payment)
 

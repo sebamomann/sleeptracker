@@ -36,6 +36,20 @@ struct NightSession: Codable, Identifiable {
         /// On-device transcript, for events the classifier called speech. Nil when nothing
         /// intelligible came back, which is common — sleep speech is often mumbled.
         var transcript: String?
+        /// Optional rather than defaulted: synthesised Codable does not fall back to a
+        /// property's default value for a missing key, it throws — so a non-optional Bool
+        /// here would make every night recorded before starring existed unreadable.
+        var starred: Bool?
+        /// Separate from the star on purpose: a star keeps something because it is
+        /// interesting, a flag keeps it because it is worrying. Collapsing them would make
+        /// the favourites view unable to tell curiosity from concern.
+        var flagged: Bool?
+        /// A short note on either mark: "ask about this", "was dreaming about work".
+        var note: String?
+
+        var isStarred: Bool { starred == true }
+        var isFlagged: Bool { flagged == true }
+        var isMarked: Bool { isStarred || isFlagged }
         var topLabel: SoundLabel? { labels?.first }
         var isSpeech: Bool {
             (labels ?? []).contains { $0.identifier.lowercased().contains("speech") }
@@ -126,6 +140,10 @@ extension NightSession {
     }
 
     var notableEvents: [EventRecord] { events.filter(Highlights.isNotable) }
+
+    var starredEvents: [EventRecord] { events.filter(\.isStarred) }
+    var flaggedEvents: [EventRecord] { events.filter(\.isFlagged) }
+    var markedEvents: [EventRecord] { events.filter(\.isMarked) }
 
     /// Total time spent on anything the classifier called snoring.
     var snoringSeconds: Double {

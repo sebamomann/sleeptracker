@@ -5,8 +5,10 @@ import SwiftUI
 struct HighlightReelView: View {
     let session: NightSession
     @ObservedObject var player: EventPlayer
+    @ObservedObject var store: NightsStore
+    var onEditNote: (NightSession.EventRecord) -> Void
 
-    private var store: SessionStore { .shared }
+    private var files: SessionStore { .shared }
 
     var body: some View {
         let reel = Highlights.reel(for: session)
@@ -30,7 +32,7 @@ struct HighlightReelView: View {
 
     @ViewBuilder
     private func row(_ h: Highlight) -> some View {
-        let playable = h.event.map { store.url(forEvent: $0, in: session.id) }
+        let playable = h.event.map { files.url(forEvent: $0, in: session.id) }
         Button {
             if let url = playable, let e = h.event { player.toggle(url: url, index: e.index) }
         } label: {
@@ -55,11 +57,51 @@ struct HighlightReelView: View {
                     .foregroundStyle(Theme.textMuted)
                 }
                 Spacer(minLength: 4)
+
+                // Marking belongs here: this is the screen where you actually listen, so it
+                // is where you decide something is worth keeping.
+                if let e = h.event {
+                    HStack(spacing: 2) {
+                        Button {
+                            store.toggleStar(sessionID: session.id, eventIndex: e.index)
+                        } label: {
+                            Image(systemName: e.isStarred ? "star.fill" : "star")
+                                .font(.footnote)
+                                .foregroundStyle(e.isStarred ? Theme.signal
+                                                            : Theme.textMuted.opacity(0.6))
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            store.toggleFlag(sessionID: session.id, eventIndex: e.index)
+                        } label: {
+                            Image(systemName: e.isFlagged ? "flag.fill" : "flag")
+                                .font(.footnote)
+                                .foregroundStyle(e.isFlagged ? Theme.gap
+                                                            : Theme.textMuted.opacity(0.6))
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .padding(.vertical, 11).padding(.horizontal, 13)
         }
         .buttonStyle(.plain)
         .disabled(playable == nil)
+        .contextMenu {
+            if let e = h.event {
+                Button { onEditNote(e) } label: {
+                    Label(e.note == nil ? "Add note" : "Edit note",
+                          systemImage: "square.and.pencil")
+                }
+                ShareLink(item: files.url(forEvent: e, in: session.id)) {
+                    Label("Share clip", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
     }
 
     @ViewBuilder
