@@ -6,6 +6,7 @@ import SwiftUI
 /// dominate a whole hour and hide an hour of continuous snoring.
 struct HourStrip: View {
     let session: NightSession
+    @State private var grown = false
 
     var body: some View {
         let hours = session.byHour
@@ -14,14 +15,20 @@ struct HourStrip: View {
 
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .bottom, spacing: 5) {
-                ForEach(hours) { h in
+                ForEach(Array(hours.enumerated()), id: \.element.id) { index, h in
                     VStack(spacing: 5) {
                         GeometryReader { geo in
                             VStack(spacing: 0) {
                                 Spacer(minLength: 0)
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(h.seconds == 0 ? Theme.surface2 : Theme.signal)
-                                    .frame(height: max(3, geo.size.height * h.seconds / scale))
+                                    .frame(height: grown
+                                        ? max(3, geo.size.height * h.seconds / scale)
+                                        : 3)
+                                    .animation(
+                                        Motion.respecting(Motion.stagger(index)),
+                                        value: grown
+                                    )
                             }
                         }
                         .frame(height: 56)

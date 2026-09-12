@@ -8,15 +8,19 @@ struct ContentView: View {
     @State private var tab: Tab = .record
 
     var body: some View {
-        Group {
+        ZStack {
             if recorder.isRecording {
                 // Recording takes the whole screen rather than living in a tab: there is
                 // nothing else to do while it runs, and the screen is meant to be dark.
+                // It fades in over half a second — a hard cut to black at bedtime is a
+                // small shock, and this is the one screen you look at on the way to sleep.
                 RecordView(recorder: recorder)
+                    .transition(.opacity)
             } else {
-                tabs
+                tabs.transition(.opacity)
             }
         }
+        .motion(Motion.gentle, value: recorder.isRecording)
         .preferredColorScheme(.dark)
         .tint(Theme.signal)
         .onAppear { nights.reload() }
@@ -189,6 +193,7 @@ private struct NightsTab: View {
                     }
                     .listStyle(.plain)
                     .background(Theme.surface0)
+                    .motion(Motion.standard, value: store.sessions.count)
                 }
             }
             .navigationTitle("Nights")

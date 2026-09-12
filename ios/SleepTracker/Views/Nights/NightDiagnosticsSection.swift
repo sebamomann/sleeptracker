@@ -15,11 +15,14 @@ struct NightDiagnosticsSection: View {
 
     @ViewBuilder
     private var log: some View {
-        Button { expanded.toggle() } label: {
+        Button {
+            withAnimation(Motion.respecting(Motion.standard)) { expanded.toggle() }
+        } label: {
             HStack {
                 Text("Diagnostics (\(session.marks.count))").font(.sectionTitle)
                 Spacer()
-                Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.fine)
+                Image(systemName: "chevron.down").font(.fine)
+                    .rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(Theme.textPrimary)
             .padding(.top, Layout.loose)
@@ -51,6 +54,7 @@ struct NightDiagnosticsSection: View {
                     .padding(.top, Layout.loose)
             }
             .card()
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 

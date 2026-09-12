@@ -33,6 +33,8 @@ struct FavouritesView: View {
                     }
                 }
                 .padding(Layout.gutter)
+                .motion(Motion.standard, value: filter)
+                .motion(Motion.standard, value: store.markedCount)
             }
             .background(Theme.surface0)
             .navigationTitle("Favourites")

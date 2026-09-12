@@ -95,14 +95,31 @@ struct HighlightReel: View {
         case .pause:
             Image(systemName: "pause.circle").font(.title3).foregroundStyle(Theme.gap)
         case .notable:
-            Image(systemName: playing ? "stop.circle.fill" : "exclamationmark.circle")
-                .font(.title3).foregroundStyle(Theme.gap)
+            playIcon(
+                playing ? "stop.circle.fill" : "exclamationmark.circle",
+                tint: Theme.gap,
+                playing: playing
+            )
         case .spoken:
-            Image(systemName: playing ? "stop.circle.fill" : "text.quote")
-                .font(.title3).foregroundStyle(Theme.signal)
+            playIcon(
+                playing ? "stop.circle.fill" : "text.quote",
+                tint: Theme.signal,
+                playing: playing
+            )
         default:
-            Image(systemName: playing ? "stop.circle.fill" : "play.circle")
-                .font(.title3).foregroundStyle(Theme.event)
+            playIcon(
+                playing ? "stop.circle.fill" : "play.circle",
+                tint: Theme.event,
+                playing: playing
+            )
         }
+    }
+
+    private func playIcon(_ name: String, tint: Color, playing: Bool) -> some View {
+        Image(systemName: name)
+            .font(.title3)
+            .foregroundStyle(tint)
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(.pulse, isActive: playing)
     }
 }

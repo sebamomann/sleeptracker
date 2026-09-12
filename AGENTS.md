@@ -56,6 +56,13 @@ made only in Swift is untested by definition.
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
 own `DateFormatter` that had already drifted. Add to `Design/` instead.
 
+**Animation goes through `Motion`, and must yield to Reduce Motion.** Use `Motion.quick`,
+`.standard`, `.gentle` or `.springy`, and either `.motion(_:value:)` or
+`withAnimation(Motion.respecting(...))` — never a bare `Animation` literal. Two speeds for
+two situations: anything you touch responds in under 200 ms, while anything to do with going
+to sleep takes its time. The recording screen is looked at in a dark bedroom, so motion
+there stays slow and low-contrast; a bright or fast effect on that screen is a bug.
+
 **New `NightSession` or `EventRecord` fields must be optional.** Synthesised `Codable` does
 not fall back to a property's default for a missing key — it throws. A non-optional `Bool`
 makes every previously recorded night unreadable.

@@ -16,20 +16,25 @@ struct NightCaptureSection: View {
     var body: some View {
         disclosure
         if expanded {
-            Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
-            backgroundEvidence
-            tiles
-            if session.envelope.count > 1 {
-                SectionHeader("Loudness")
-                EnvelopeChart(session: session)
+            VStack(alignment: .leading, spacing: Layout.section) {
+                Verdict(title: verdictTitle, detail: verdictDetail, good: session.survived)
+                backgroundEvidence
+                tiles
+                if session.envelope.count > 1 {
+                    SectionHeader("Loudness")
+                    EnvelopeChart(session: session)
+                }
+                eventList
+                NightDiagnosticsSection(session: session)
             }
-            eventList
-            NightDiagnosticsSection(session: session)
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
     private var disclosure: some View {
-        Button { expanded.toggle() } label: {
+        Button {
+            withAnimation(Motion.respecting(Motion.standard)) { expanded.toggle() }
+        } label: {
             HStack {
                 Text("Recording detail").font(.sectionTitle)
                 if !session.survived, !session.tooShort {
@@ -37,7 +42,8 @@ struct NightCaptureSection: View {
                         .font(.fine).foregroundStyle(Theme.gap)
                 }
                 Spacer()
-                Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.fine)
+                Image(systemName: "chevron.down").font(.fine)
+                    .rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(Theme.textPrimary)
             .padding(.top, Layout.loose)

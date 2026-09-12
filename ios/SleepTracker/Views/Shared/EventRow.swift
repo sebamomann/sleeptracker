@@ -29,6 +29,8 @@ struct EventRow: View {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle")
                         .font(.title3)
                         .foregroundStyle(event.isFlagged ? Theme.gap : Theme.event)
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.pulse, isActive: isPlaying)
                 }
                 .buttonStyle(.plain)
 

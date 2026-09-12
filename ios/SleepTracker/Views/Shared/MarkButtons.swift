@@ -42,6 +42,10 @@ struct MarkButtons: View {
             Image(systemName: active ? filled : empty)
                 .font(.footnote)
                 .foregroundStyle(active ? tint : Theme.textMuted.opacity(0.6))
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: active)
+                .scaleEffect(active ? 1.1 : 1)
+                .animation(Motion.respecting(Motion.springy), value: active)
                 // A target larger than the glyph: these are reached with a thumb, often
                 // first thing in the morning.
                 .frame(width: Layout.hitTarget, height: Layout.hitTarget)
