@@ -8,21 +8,21 @@ The gate is a direct port of `public/analysis.js` — same constants, same rolli
 same hysteresis, same warmup rule, same edge fades. Keep the two in step when tuning; the
 JS side is the one with the test suite, so change and test there first.
 
-| File | What |
+| Folder | What |
 |---|---|
-| `NoiseGate.swift` | Rolling noise floor + hysteresis gate. Port of `analysis.js` |
-| `SampleRing.swift` | Circular PCM history, so a closed event can still be cut out |
-| `NightRecorder.swift` | `AVAudioEngine` tap, session handling, WAV writing |
-| `EventClassifier.swift` | On-device sound labels via SoundAnalysis (~300 classes) |
-| `Transcriber.swift` | On-device speech-to-text for speech events, `requiresOnDeviceRecognition` |
-| `QuietGaps.swift` | Near-silence bracketed by sound. Port of `findQuietGaps` |
-| `Highlights.swift` | Variety-first ranking of what is worth hearing |
-| `SessionStore.swift` · `NightSession.swift` | Nights on disk, and the derived verdict |
-| `NightsStore.swift` | The loaded nights, and the only place marks and notes are mutated |
-| `EventRow.swift` | One event, shared by the night list, the reel and favourites |
-| `FavouritesView.swift` | Stars and flags across every night, grouped by date |
-| `SessionDetailView.swift` + `HighlightReelView` + `HourStripView` + `EnvelopeChart` | The morning report |
-| `ContentView.swift` | Tab bar: Record, Nights, Favourites |
+| `App/` | The tab shell and app entry point |
+| `Design/` | Colours, one spacing scale, semantic type roles, every date format |
+| `Model/` | `NightSession` (the file format), its derived summaries, value types |
+| `Audio/` | Capture, session policy, the gate, the ring, event writing, orchestration |
+| `Analysis/` | Classifier, transcriber, quiet gaps, highlight ranking |
+| `Storage/` | Nights on disk, and the one place marks are mutated |
+| `Playback/` · `System/` | Event playback; the bedtime reminder |
+| `Views/` | `Record/`, `Nights/`, `Favourites/`, `Shared/` |
+
+Three threads meet in `Audio/`, and the boundaries are the design: the **audio thread**
+delivers samples and never waits on anything; **`AnalysisPipeline`** owns the gate, ring and
+health counters on its own serial queue; **`io`** encodes, classifies and writes, which takes
+long enough that sharing a queue with the audio path would drop capture.
 
 ## Build it (free Apple ID, no payment)
 
@@ -95,6 +95,31 @@ If events appear with timestamps from while the screen was locked, background ca
 on a free personal team and the rest of the roadmap is unblocked. If it does not, say so
 before spending more time — that is the one assumption in this plan that could not be
 tested from a terminal.
+
+## Quality gates
+
+```sh
+npm run check        # tests, then all three linters
+npm run lint:fix     # autocorrect what is mechanical
+```
+
+| Tool | Catches | Config |
+|---|---|---|
+| SwiftLint | complexity, file/type/function length, naming, smells | `.swiftlint.yml` |
+| SwiftFormat | formatting only | `.swiftformat` |
+| jscpd | copy-paste across Swift *and* the JS side | `.jscpd.json` |
+
+All three run in CI and fail the build. Two things worth knowing if you touch the configs:
+
+- SwiftLint's thresholds are set **where the code already sits**, so a violation means
+  something changed rather than that the bar was never met. That is what makes `--strict`
+  fair rather than noise everyone learns to ignore.
+- jscpd needs `format` to list `swift` explicitly. It is not in the default set, and without
+  it the entire app is silently skipped while the report still reads `0 clones`.
+- `modifierOrder` is disabled in SwiftFormat because SwiftLint wants the opposite order, and
+  with both enabled each run undid the other. One tool per concern.
+
+Install the Swift pair once: `brew install swiftlint swiftformat`. jscpd runs via `npx`.
 
 ## Audio format
 

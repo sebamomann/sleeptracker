@@ -39,6 +39,7 @@ pipeline {
         app_port      = '34257'
 
         test_container  = "sleeptracker-unit-${branch_slug}"
+        lint_container  = "sleeptracker-lint-${branch_slug}"
         smoke_container = "sleeptracker-smoke-${branch_slug}"
     }
 
@@ -71,6 +72,59 @@ pipeline {
                     }
                     post {
                         always { sh "docker rm -fv ${test_container} || true" }
+                    }
+                }
+
+                stage('Lint') {
+                    steps {
+                        script {
+                            sh """
+                                docker rm -fv ${lint_container} || true
+                                # --strict turns warnings into failures. The thresholds in
+                                # .swiftlint.yml are set where the code already sits, so a
+                                # violation means something changed, not that the bar was
+                                # never met — which is what makes failing the build fair.
+                                docker create \\
+                                    --name ${lint_container} \\
+                                    -w /workspace \\
+                                    -e NO_COLOR=1 \\
+                                    ghcr.io/realm/swiftlint:latest \\
+                                    swiftlint lint --strict --quiet
+                                git archive --format=tar --prefix=workspace/ HEAD \\
+                                    ios/SleepTracker .swiftlint.yml \\
+                                    | docker cp - ${lint_container}:/
+                                docker start -a ${lint_container}
+                            """
+                        }
+                    }
+                    post {
+                        always { sh "docker rm -fv ${lint_container} || true" }
+                    }
+                }
+
+                stage('Duplication') {
+                    steps {
+                        script {
+                            sh """
+                                docker rm -fv ${lint_container}-dup || true
+                                # jscpd needs `format` to include swift explicitly — it is not
+                                # in the default set, and without it the whole app is silently
+                                # skipped while the report still reads 0 clones.
+                                docker create \\
+                                    --name ${lint_container}-dup \\
+                                    -w /workspace \\
+                                    -e NO_COLOR=1 \\
+                                    node:24-alpine \\
+                                    npx --yes jscpd@4 . --config .jscpd.json --reporters console
+                                git archive --format=tar --prefix=workspace/ HEAD \\
+                                    ios/SleepTracker public recorder tests server.mjs .jscpd.json \\
+                                    | docker cp - ${lint_container}-dup:/
+                                docker start -a ${lint_container}-dup
+                            """
+                        }
+                    }
+                    post {
+                        always { sh "docker rm -fv ${lint_container}-dup || true" }
                     }
                 }
 

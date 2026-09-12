@@ -1,0 +1,29 @@
+{
+  "threshold": 2,
+  "minLines": 8,
+  "minTokens": 70,
+  "mode": "mild",
+  "absolute": true,
+  "gitignore": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/reports/**",
+    "**/certs/**",
+    "**/*.xcodeproj/**",
+    "**/ios/build/**"
+  ],
+  "reporters": [
+    "console",
+    "json"
+  ],
+  "output": "reports/jscpd",
+  "format": [
+    "swift",
+    "javascript",
+    "html",
+    "css",
+    "markdown",
+    "yaml",
+    "json"
+  ]
+}

@@ -1,0 +1,22 @@
+# Formatting only — anything about structure belongs in .swiftlint.yml.
+--swiftversion 5.9
+--maxwidth 100
+--indent 4
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections preserve
+--closingparen balanced
+--trimwhitespace always
+--stripunusedargs closure-only
+--self remove
+--importgrouping testable-bottom
+--commas inline
+# Comments here carry reasoning and are wrapped deliberately; reflowing them would destroy
+# the line breaks that make them readable.
+--enable isEmpty,redundantParens,redundantReturn,redundantSelf,sortImports,spaceAroundOperators
+# wrapPropertyBodies: `var id: String { label }` is clearer on one line than split across
+# three, and trivial computed accessors are most of what this codebase has.
+# modifierOrder: SwiftFormat puts access control first, SwiftLint's modifier_order wants
+# `nonisolated` first, and with both enabled each run undid the other. SwiftLint owns it.
+--disable wrapMultilineStatementBraces,blankLinesAroundMark,wrapSingleLineComments,wrapPropertyBodies,modifierOrder
+--exclude ios/SleepTracker.xcodeproj
