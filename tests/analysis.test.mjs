@@ -213,3 +213,24 @@ test('buildSilentWav honours its duration', () => {
   const b = Buffer.from(buildSilentWav({ seconds: 0.5, rate: 16000 }));
   assert.equal(b.readUInt32LE(40) / 2 / 16000, 0.5);
 });
+
+test('a recorder started mid-sound does not close the gate on that sound', () => {
+  // The floor window starts empty, so the first seconds are the only evidence of what the
+  // room sounds like. If a loud opening is taken as the floor, the threshold rises above
+  // the sound in progress and the gate shuts roughly a close-hold later — truncating
+  // exactly the event that was loud enough to start the recording.
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => (t < 8 ? -26 : -58));
+
+  assert.ok(a.events.length >= 1, 'the opening sound must produce an event');
+  const first = a.events[0];
+  assert.ok(first.e - first.s > 6,
+    `opening event lasted ${(first.e - first.s).toFixed(1)}s; the sound ran 8s`);
+});
+
+test('the floor still converges on the room once the window fills', () => {
+  const a = makeAnalyser();
+  run(a, 5 * 60 * 50, t => (t < 8 ? -26 : -58));
+  assert.ok(Math.abs(a.floorDb - -58) <= 2,
+    `floor ${a.floorDb} should settle on the room, not the loud opening`);
+});

@@ -14,6 +14,9 @@ answers are needed before any of the rest is worth building.
 | `public/index.html` | The app — one page, three screens (setup / recording / report) |
 | `public/analysis.js` | Noise floor, gate and gap detection. Pure, no DOM, injected clock |
 | `tests/analysis.test.mjs` | Tests for the above, incl. simulated OS suspensions |
+| `public/wav.js` | 16-bit PCM WAV encoder, shared by the browser and the recorder |
+| `recorder/record.mjs` | Bedside recorder — captures, gates, writes one WAV per event |
+| `recorder/ring.mjs` | Rolling PCM history, so a closed event can still be cut out |
 | `server.mjs` | Production server: static files + `/api/health`. Stdlib only |
 | `scripts/dev-https.mjs` | Local HTTPS with a self-signed cert, for testing on a phone |
 | `Dockerfile` · `Jenkinsfile` · `ci/` | Build and deploy, same shape as the plants repo |
@@ -57,6 +60,31 @@ repo's `Notify: Pending` stage and `post { success / failure / aborted }` blocks
 Jenkins credential holding a token with `repo:status`.
 
 Push to `main` and the pipeline builds, tests, smoke-tests and deploys.
+
+## The recorder
+
+iOS revokes the microphone the moment the screen locks (see below), so the thing that
+actually records a night is a small always-on machine, not a phone. The recorder runs the
+**same analysis module** as the browser spike — same gate, same rolling floor, same
+thresholds — but outside a sandbox, so it keeps the audio.
+
+```sh
+node recorder/record.mjs                 # until Ctrl-C
+node recorder/record.mjs --minutes 5     # short trial
+node recorder/record.mjs --source stdin  # f32le PCM from a pipe, for testing
+```
+
+Capture backend, first one found: `arecord` (ships with Raspberry Pi OS — a Pi needs
+nothing installed), then `sox`, then `ffmpeg`. Output:
+
+```
+nights/2026-09-12-23-00/
+  session.json          envelope, gaps, event index, noise floor
+  events/0001-231407.wav  one file per event, 16 kHz mono, pre/post-rolled
+```
+
+A night of real snoring lands in the low tens of MB as WAV. Re-encoding to Opus at 24 kbps
+cuts that by roughly 10× and is the next step, along with uploading to this server.
 
 ## The night
 
@@ -106,12 +134,27 @@ freezes every counter inside the analyser along with it — and differencing fro
 reports a short, perfectly healthy night. `summarise()` in `public/analysis.js` owns that
 distinction and is tested against it.
 
-### iOS
+### iOS — measured, three times
 
-iOS suspends microphone capture when the screen locks, and there is no background-audio
-permission for web pages. The app detects iOS and says so up front. The spike is still
-worth running there: it confirms the failure and measures your noise floor, which is the
-number a native recorder needs anyway.
+Three runs on iOS 26.6.1, all with the same signature:
+
+```
+audiocontext: interrupted   4.30s
+visibility:   hidden        4.43s   <- 122ms LATER
+```
+
+The audio session is torn down *before* the page lifecycle registers anything, so this is
+not page throttling to work around — the OS revokes the session. 98.7% and 99.6% of those
+sessions were dead air.
+
+iOS governs playback and capture separately: a page that only plays audio keeps the
+`playback` category and continues while locked, which is why YouTube works. Calling
+`getUserMedia` switches the session to `playAndRecord`, and that category is interrupted on
+background. There is no web equivalent of `UIBackgroundModes: audio`, in a tab or an
+installed PWA, and a native app needs a code signature to run at all — signing is an OS
+requirement, not an App Store one.
+
+Hence the recorder above.
 
 ## Tunables
 

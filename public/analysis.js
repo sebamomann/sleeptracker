@@ -9,6 +9,8 @@ export const DEFAULTS = {
   CLOSE_MS:    1500,  // sustained below threshold before it closes
   ROLL_MS:     3000,  // pre-roll + post-roll padding added to each event's size estimate
   FLOOR_WIN_S: 60,    // rolling window for the noise floor
+  FLOOR_WARMUP_S: 10, // ...before which the floor may only fall, never rise
+  INITIAL_FLOOR_DB: -60,
   MAX_HOURS:   14,    // hard cap on stored envelope length
   MAX_EVENTS:  5000,
   STALL_MS:    700,   // a message gap longer than this is recorded
@@ -44,7 +46,7 @@ export class NightAnalyser {
 
     this._sec = [];
     this._floorHist = [];
-    this.floorDb = -60;
+    this.floorDb = this.cfg.INITIAL_FLOOR_DB;
     this._frame = 0;
     this._lastMsg = 0;
     this._lastAudioSec = 0;
@@ -112,7 +114,18 @@ export class NightAnalyser {
     }
     this._floorHist.push(p10);
     if (this._floorHist.length > C.FLOOR_WIN_S) this._floorHist.shift();
-    this.floorDb = median(this._floorHist);
+    // The median is right once the window holds a representative mix of quiet and loud
+    // seconds. Before that it is whatever happened to come first: a recorder started
+    // mid-snore takes the snore as the floor, lifts the threshold above it, and closes the
+    // gate on the very event it was opened for. Until there is enough history, take the
+    // quietest second seen instead — the conservative reading, and the one that keeps the
+    // opening event intact.
+    this.floorDb = this._floorHist.length >= C.FLOOR_WARMUP_S
+      ? median(this._floorHist)
+      // During warmup the floor may fall but never rise. A quiet room is recognised on the
+      // first second; a loud opening cannot drag the threshold up over itself, because the
+      // one thing a short loud window does not tell you is how quiet the room gets.
+      : Math.min(C.INITIAL_FLOOR_DB, ...this._floorHist);
     this._sec = [];
   }
 
