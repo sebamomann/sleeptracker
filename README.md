@@ -7,6 +7,10 @@ and gives you a timeline you can play back in the morning.
 audio capture survives a locked phone, and what your bedroom's noise floor is. Both
 answers are needed before any of the rest is worth building.
 
+Working on this repo: **[AGENTS.md](AGENTS.md)** carries the rules that are not obvious
+from the code — which half owns the gate, the threading contract, the Codable trap, the
+tooling gotchas, and what has already been settled by measurement so it is not re-litigated.
+
 ## Layout
 
 | Path | What |
