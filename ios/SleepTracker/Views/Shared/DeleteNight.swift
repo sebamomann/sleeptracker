@@ -39,8 +39,8 @@ extension View {
             pending.wrappedValue?.title ?? "",
             isPresented: Binding(
                 get: { pending.wrappedValue != nil },
-                set: {
-                    presented in if !presented {
+                set: { presented in
+                    if !presented {
                         pending.wrappedValue = nil
                     }
                 }
