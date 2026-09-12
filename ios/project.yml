@@ -35,7 +35,7 @@ targets:
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
-        # Regenerating the project resets whatever you pick in Xcode's Signing &
-        # Capabilities pane, so once you know your personal team's ID, put it here and it
-        # survives. Find it with: security find-identity -v -p codesigning
-        # DEVELOPMENT_TEAM: XXXXXXXXXX
+        # Pinned so regenerating the project does not reset what was picked in Xcode's
+        # Signing & Capabilities pane. This is the free personal team; find it again with
+        #   security find-identity -v -p codesigning
+        DEVELOPMENT_TEAM: H65648747K
