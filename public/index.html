@@ -136,16 +136,20 @@
     <p class="hint" style="margin:12px 0 0">Plug the device in. Recording survives a locked
     screen only if the OS allows it — that is the whole question.</p>
     <p class="hint" id="err" style="color:var(--series-gap)"></p>
+    <p class="hint" style="margin:20px 0 0">Recorded on another device?
+      <label style="color:var(--series-signal);cursor:pointer;text-decoration:underline">open a
+      saved JSON<input type="file" id="imp" accept="application/json,.json" hidden></label>
+      — reports render entirely client-side, so a night from the phone opens here unchanged.</p>
   </div>
 
   <div id="report" hidden></div>
 </div>
 
 <script type="module">
-import { NightAnalyser, DEFAULTS, keptMs, megabytesFor, median } from './analysis.js';
+import { NightAnalyser, DEFAULTS, keptMs, megabytesFor, median, summarise } from './analysis.js';
 
 const $ = s => document.querySelector(s);
-const KEY = 'sleeptracker.spike.v2';
+const KEY = 'sleeptracker.spike.v3';
 
 let A = null, S = null, ctx = null, node = null, stream = null,
     wakeLock = null, silentEl = null, uiTimer = null, saveTimer = null;
@@ -174,7 +178,8 @@ if (isIOS) $('#platformNote').innerHTML = `<p class="note"><b>This is an iPhone 
 
 /* ── session ──────────────────────────────────────────────────────────────── */
 function snapshot(){
-  return { v:2, t0:S.t0, startedAt:S.startedAt, endedAt:S.endedAt, ended:S.ended,
+  return { v:3, t0:S.t0, startedAt:S.startedAt, endedAt:S.endedAt, ended:S.ended,
+           lastAliveAt:Date.now(),
            profile:S.profile, ua:S.ua, marks:S.marks, ...A.toJSON() };
 }
 function save(){
@@ -336,12 +341,9 @@ function renderReport(s){
   $('#setup').hidden = true;
   const r = $('#report'); r.hidden = false;
 
-  const wall = s.wallMs, audioMs = s.audioSec * 1000;
-  const deadMs = Math.max(0, wall - audioMs);
-  const realGaps = s.gaps.filter(g => g.audioLostMs > DEFAULTS.LOST_MS);
-  const worst = realGaps.reduce((m, g) => Math.max(m, g.audioLostMs), 0);
-  const survived = deadMs < 30000 && wall > 60000;
-  const tooShort = wall <= 60000;
+  const R = summarise(s);
+  const { wall, audioMs, deadMs, realGaps, worstGapMs: worst,
+          survived, tooShort, stoppedAt, trailingDeadMs, diedAndStayedDead } = R;
 
   const fMed = Math.round(median(s.env.map(e => e[2])));
   const gate = fMed + DEFAULTS.GATE_DB;
@@ -357,10 +359,17 @@ function renderReport(s){
     <div class="verdict ${survived ? 'good' : 'bad'}">
       <h3>${tooShort ? 'Too short to judge'
             : survived ? 'Survived — capture ran end to end'
+            : diedAndStayedDead ? `Capture died at ${hhmmss(stoppedAt)} and never came back`
             : `Capture stopped for ${dur(deadMs)}`}</h3>
       <p>${tooShort ? 'Run a full night before drawing any conclusion.'
           : survived ? `The browser kept the audio thread alive for the whole session on the
             <b>${s.profile}</b> profile. The web path works on this device.`
+          : diedAndStayedDead
+            ? `It ran for ${dur(stoppedAt - s.t0)}, then stopped for the remaining
+               ${dur(trailingDeadMs)}${lockedThenDied
+                 ? ' — within seconds of the screen going dark' : ''}.
+               ${lockedThenDied ? 'The OS suspended the page on lock; no web-side work changes that. '
+                                : ''}The recorder has to be a native app.`
           : lockedThenDied
             ? `Capture stopped within seconds of the screen going dark. The OS suspended the
                page on lock — no amount of web-side work changes that. The recorder needs to
@@ -377,6 +386,9 @@ function renderReport(s){
       <div class="tile"><div class="k">Dead time</div>
         <div class="v" style="color:${deadMs > 30000 ? 'var(--series-gap)' : 'var(--text-primary)'}">${dur(deadMs)}</div>
         <div class="n">${realGaps.length} gap${realGaps.length === 1 ? '' : 's'}${worst ? `, worst ${dur(worst)}` : ''}</div></div>
+      ${diedAndStayedDead ? `<div class="tile"><div class="k">Capture stopped</div>
+        <div class="v" style="color:var(--series-gap)">${hhmmss(stoppedAt)}</div>
+        <div class="n">${dur(stoppedAt - s.t0)} into the night</div></div>` : ''}
       <div class="tile"><div class="k">Noise floor</div><div class="v">${fMed} dB</div>
         <div class="n">median of per-second p10</div></div>
       <div class="tile"><div class="k">Suggested gate</div><div class="v">${gate} dB</div>
@@ -388,7 +400,8 @@ function renderReport(s){
     <h2>The night</h2>
     <figure>
       <figcaption>Loudness per second in dBFS. The gate would have opened where the envelope
-      crosses ${gate} dB.</figcaption>
+      crosses ${gate} dB.${diedAndStayedDead ? ` Only the ${dur(stoppedAt - s.t0)} before capture
+      died is plotted — the remaining ${dur(trailingDeadMs)} produced no data at all.` : ''}</figcaption>
       <div class="chartbox">
         <canvas id="cv"></canvas><div id="tip"></div>
         <div class="legend">
@@ -433,6 +446,7 @@ function renderReport(s){
 
     <div class="row" style="margin-top:24px">
       <button id="dl">Download JSON</button>
+      <button id="copy">Copy JSON</button>
       <button id="again" class="danger">Discard &amp; record another night</button>
     </div>`;
 
@@ -442,6 +456,11 @@ function renderReport(s){
     a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], {type:'application/json'}));
     a.download = `sleep-spike-${new Date(s.t0).toISOString().slice(0,16).replace(/[:T]/g,'-')}.json`;
     a.click();
+  };
+  $('#copy').onclick = async e => {
+    try { await navigator.clipboard.writeText(JSON.stringify(s)); e.target.textContent = 'Copied'; }
+    catch { e.target.textContent = 'Clipboard blocked'; }
+    setTimeout(() => { e.target.textContent = 'Copy JSON'; }, 2000);
   };
   $('#again').onclick = () => {
     if (!confirm('Discard this night’s data?')) return;
@@ -534,6 +553,13 @@ function drawChart(s, gateDb){
 /* ── boot: recover an interrupted session ─────────────────────────────────── */
 $('#startBtn').onclick = start;
 $('#stopBtn').onclick  = stop;
+
+$('#imp').onchange = async e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  try { renderReport(JSON.parse(await f.text())); }
+  catch (err) { $('#err').textContent = 'Could not read that file: ' + err.message; }
+};
 
 const prev = load();
 if (prev && prev.env?.length > 10){

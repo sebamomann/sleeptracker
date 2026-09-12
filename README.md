@@ -70,11 +70,29 @@ Push to `main` and the pipeline builds, tests, smoke-tests and deploys.
 If the browser evicted the tab overnight, the data is still there — reopen the page and it
 offers the interrupted session's report. A night that died is still a result.
 
+## Where the result lives
+
+Nothing is sent anywhere — the night is held in the phone's `localStorage` and the report
+renders from it locally.
+
+- **Normal morning:** unlock, press **Stop recording**. The report appears.
+- **The tab was evicted overnight:** reopen the page. It offers the interrupted session's
+  report from the last save (every 10 s, plus one forced save the moment the screen locks,
+  so at most 10 s is ever missing).
+- **Getting it onto a real screen:** **Copy JSON** or **Download JSON** on the report, then
+  open it on the Mac with *open a saved JSON* on the start screen. Reports render entirely
+  client-side, so the file opens unchanged on any device.
+- **Live console output while it runs:** iPhone Settings → Safari → Advanced → Web
+  Inspector, connect by cable, then Safari on the Mac → Develop → your phone. This survives
+  the screen locking and is the only way to watch it die in real time.
+- **Deploy logs:** the Jenkins job. Nothing about a night's recording goes through it.
+
 ## Reading the report
 
 | Reading | Means |
 |---|---|
 | Dead time under ~30 s | Survived a locked screen. Build phase 1 as a PWA. |
+| "Capture died at HH:MM and never came back" | The OS suspended the page and never resumed it — the expected iOS result. |
 | A gap starting within seconds of `visibility: hidden` | The OS suspended capture on lock. Go native. |
 | Many stalls, zero audio lost | Main thread throttled, capture fine. Harmless. |
 | Suggested gate | Use as `GATE_DB` in phase 1 — and in Swift, if it comes to that. |
@@ -82,7 +100,11 @@ offers the interrupted session's report. A night that died is still a result.
 
 Dead time is derived from the worklet's sample counter, not from a timer, because a
 throttled main thread makes every timer lie — a stalled `setInterval` looks exactly like a
-dead recorder otherwise.
+dead recorder otherwise. The session's *end*, though, has to come from outside the audio
+thread (the stop timestamp, or the last save), because capture that stops and never resumes
+freezes every counter inside the analyser along with it — and differencing frozen counters
+reports a short, perfectly healthy night. `summarise()` in `public/analysis.js` owns that
+distinction and is tested against it.
 
 ### iOS
 

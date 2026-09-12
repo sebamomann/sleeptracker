@@ -37,6 +37,10 @@ export class NightAnalyser {
     this.wallMs = 0;
     this.msgCount = 0;
     this.peakSinceRead = -100;
+    // Wall clock of the most recent frame batch. This is the only record of when capture
+    // actually stopped: if the OS suspends the page and never resumes it, pushFrames is
+    // simply never called again, and every other counter freezes with it.
+    this.lastFrameAt = 0;
 
     this._sec = [];
     this._floorHist = [];
@@ -59,8 +63,8 @@ export class NightAnalyser {
   readPeak() { const p = this.peakSinceRead; this.peakSinceRead = -100; return p; }
 
   toJSON() {
-    const { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0 } = this;
-    return { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0 };
+    const { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt } = this;
+    return { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt };
   }
 
   pushFrames(rmsList, totalSamples, now) {
@@ -84,6 +88,7 @@ export class NightAnalyser {
     }
     this._lastMsg = now;
     this._lastAudioSec = audioSec;
+    this.lastFrameAt = now;
     this.audioSec = audioSec;
     this.wallMs = now - this.t0;
     this.msgCount++;
@@ -140,3 +145,36 @@ export function keptMs(events, cfg = DEFAULTS) {
 
 /** Opus mono at 24 kbps. */
 export const megabytesFor = ms => ms / 1000 * (24 / 8) / 1024;
+
+/**
+ * Turn a stored session into the numbers the report shows.
+ *
+ * The subtlety this exists for: the analyser's own `wallMs` advances only while frames
+ * arrive, so a capture that is suspended and never resumes leaves every counter frozen at
+ * the moment it died — and naively differencing them says no time was lost at all. The
+ * session's real end has to come from outside the audio thread: the stop timestamp, or
+ * the last time the page was alive enough to save.
+ */
+export function summarise(s, cfg = DEFAULTS) {
+  const t0 = s.t0;
+  const endAt = s.endedAt ? Date.parse(s.endedAt)
+              : (s.lastAliveAt ?? t0 + (s.wallMs ?? 0));
+  const wall = Math.max(0, endAt - t0);
+  const audioMs = (s.audioSec ?? 0) * 1000;
+  const deadMs = Math.max(0, wall - audioMs);
+
+  const realGaps = (s.gaps ?? []).filter(g => g.audioLostMs > cfg.LOST_MS);
+  const worstGapMs = realGaps.reduce((m, g) => Math.max(m, g.audioLostMs), 0);
+
+  // Capture that stopped and never came back leaves no gap record — there is no later
+  // message to close one — so it is measured from the last frame to the end instead.
+  const stoppedAt = s.lastFrameAt || null;
+  const trailingDeadMs = stoppedAt ? Math.max(0, endAt - stoppedAt) : 0;
+  const diedAndStayedDead = trailingDeadMs > 60_000;
+
+  const tooShort = wall <= 60_000;
+  const survived = !tooShort && deadMs < 30_000;
+
+  return { t0, endAt, wall, audioMs, deadMs, realGaps, worstGapMs,
+           stoppedAt, trailingDeadMs, diedAndStayedDead, tooShort, survived };
+}

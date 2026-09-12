@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb } from '../public/analysis.js';
+import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise } from '../public/analysis.js';
 
 const SR = 16000;
 const FRAME_SAMPLES = SR * DEFAULTS.FRAME_MS / 1000;   // 320
@@ -107,4 +107,73 @@ test('storage caps hold on a pathological night', () => {
 test('keptMs adds the pre/post roll to every event', () => {
   const ms = keptMs([{ s: 0, e: 5 }, { s: 10, e: 12 }]);
   assert.equal(ms, 7000 + 2 * DEFAULTS.ROLL_MS);
+});
+
+/* ── summarise ────────────────────────────────────────────────────────────── */
+
+const HOUR = 3600_000;
+const T0 = Date.parse('2026-09-12T23:00:00Z');
+
+function session(over = {}) {
+  return { t0: T0, audioSec: 600, wallMs: 600_000, gaps: [], env: [], events: [],
+           lastFrameAt: T0 + 600_000, ...over };
+}
+
+test('summarise: a session that ran to the end survived', () => {
+  const r = summarise(session({
+    audioSec: 8 * 3600, wallMs: 8 * HOUR, lastFrameAt: T0 + 8 * HOUR,
+    endedAt: new Date(T0 + 8 * HOUR).toISOString(),
+  }));
+  assert.equal(r.survived, true);
+  assert.ok(r.deadMs < 1000);
+  assert.equal(r.diedAndStayedDead, false);
+});
+
+test('summarise: capture that dies and never resumes is NOT reported as survived', () => {
+  // The regression this exists for. Every counter inside the analyser freezes when frames
+  // stop arriving, so differencing them alone shows a short, perfectly healthy session —
+  // which is exactly what an iPhone locking the screen produces.
+  const r = summarise(session({ endedAt: new Date(T0 + 8 * HOUR).toISOString() }));
+  assert.equal(r.survived, false, 'ten minutes of audio inside an eight-hour night is not a pass');
+  assert.equal(r.diedAndStayedDead, true);
+  assert.equal(r.stoppedAt, T0 + 600_000);
+  assert.ok(Math.abs(r.wall - 8 * HOUR) < 1000, 'wall clock comes from the stop time');
+  assert.ok(Math.abs(r.deadMs - (8 * HOUR - 600_000)) < 1000);
+  assert.ok(Math.abs(r.trailingDeadMs - (8 * HOUR - 600_000)) < 1000);
+});
+
+test('summarise: an interrupted session falls back to its last save', () => {
+  // No endedAt — the tab was evicted, so the newest save is the only evidence of how far
+  // the night actually got.
+  const r = summarise(session({ lastAliveAt: T0 + 3 * HOUR }));
+  assert.ok(Math.abs(r.wall - 3 * HOUR) < 1000);
+  assert.equal(r.survived, false);
+  assert.equal(r.diedAndStayedDead, true);
+});
+
+test('summarise: a short session is flagged rather than judged', () => {
+  const r = summarise(session({ audioSec: 30, wallMs: 30_000,
+    lastFrameAt: T0 + 30_000, endedAt: new Date(T0 + 30_000).toISOString() }));
+  assert.equal(r.tooShort, true);
+  assert.equal(r.survived, false);
+});
+
+test('summarise: gaps mid-night are counted but do not imply a permanent death', () => {
+  const r = summarise(session({
+    audioSec: 8 * 3600 - 40, wallMs: 8 * HOUR, lastFrameAt: T0 + 8 * HOUR,
+    endedAt: new Date(T0 + 8 * HOUR).toISOString(),
+    gaps: [{ at: T0 + HOUR, ms: 40_000, audioLostMs: 40_000 },
+           { at: T0 + 2 * HOUR, ms: 800, audioLostMs: 0 }],
+  }));
+  assert.equal(r.realGaps.length, 1, 'the 800 ms stall lost no audio');
+  assert.equal(r.worstGapMs, 40_000);
+  assert.equal(r.diedAndStayedDead, false, 'it recovered, so it did not stay dead');
+  assert.equal(r.survived, false, '40 s of lost audio is still a failure');
+});
+
+test('summarise: tolerates a legacy session with no lastFrameAt', () => {
+  const r = summarise({ t0: T0, audioSec: 600, wallMs: 600_000, gaps: [], env: [], events: [] });
+  assert.equal(r.stoppedAt, null);
+  assert.equal(r.diedAndStayedDead, false);
+  assert.ok(Math.abs(r.wall - 600_000) < 1000);
 });
