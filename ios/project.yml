@@ -1,6 +1,11 @@
-# XcodeGen spec — `brew install xcodegen && cd ios && xcodegen generate`, then open
-# SleepTracker.xcodeproj. Creating the project by hand in Xcode works equally well; see
-# ios/README.md. Nothing here needs a paid account.
+# XcodeGen spec — `brew install xcodegen && cd ios && xcodegen generate`.
+#
+# This file is the single source of truth for the target, including Info.plist contents.
+# `info.properties` below is GENERATED into SleepTracker/Info.plist, overwriting whatever
+# is there — an earlier version of this spec pointed `info.path` at a hand-written plist
+# and silently replaced it with defaults, dropping UIBackgroundModes and leaving an app
+# that stops recording the moment the screen locks. Add plist keys here, never to the
+# generated file.
 name: SleepTracker
 options:
   bundleIdPrefix: de.sebamomann
@@ -13,13 +18,24 @@ targets:
     sources: [SleepTracker]
     info:
       path: SleepTracker/Info.plist
+      properties:
+        # The whole reason this is a native app: a plist declaration, not a signed
+        # entitlement, so it works on a free personal team.
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: >-
+          Records the sounds of your night so they can be reviewed in the morning.
+        # Recording runs with the screen off; there is nothing to see in landscape.
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.sebamomann.sleeptracker
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
-        # Leave the team empty here and pick your personal Apple ID in Xcode under
-        # Signing & Capabilities → Team. Automatic signing handles the rest.
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
+        # Regenerating the project resets whatever you pick in Xcode's Signing &
+        # Capabilities pane, so once you know your personal team's ID, put it here and it
+        # survives. Find it with: security find-identity -v -p codesigning
+        # DEVELOPMENT_TEAM: XXXXXXXXXX
