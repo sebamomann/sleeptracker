@@ -2,111 +2,85 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var recorder = NightRecorder()
-    @State private var now = Date()
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    @State private var sessions: [NightSession] = []
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if recorder.isRecording { recordingView } else { idleView }
+        Group {
+            if recorder.isRecording {
+                RecordView(recorder: recorder)
+            } else {
+                home
+            }
         }
         .preferredColorScheme(.dark)
-        .onReceive(tick) { now = $0 }
-        // Nothing to stop on backgrounding — that is the entire point. The audio session
-        // keeps running with the screen locked, which is what the web version could not do.
-        .persistentSystemOverlays(.hidden)
+        .tint(Theme.signal)
+        .onAppear(perform: reload)
+        .onChange(of: recorder.isRecording) { _, recording in if !recording { reload() } }
     }
 
-    // MARK: -
+    private var home: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Button { recorder.start() } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "waveform.circle.fill").font(.title2)
+                            Text("Start recording").font(.headline)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    }
+                    .buttonStyle(.borderedProminent)
 
-    private var idleView: some View {
-        VStack(spacing: 22) {
-            Text("Sleeptracker").font(.title2.weight(.semibold))
-            Text("Records the night, keeps only what isn't silence.")
-                .font(.callout).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                    Text("Start it, lock the phone, leave it on a charger. Everything stays on "
+                         + "this device.")
+                        .font(.footnote).foregroundStyle(Theme.textMuted)
 
-            Button { recorder.start() } label: {
-                Text("Start recording")
-                    .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 16)
+                    if let err = recorder.lastError {
+                        Text(err)
+                            .font(.caption.monospaced()).foregroundStyle(Theme.gap)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Theme.gap.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    SectionHeader(text: sessions.isEmpty ? "No nights yet"
+                                                          : "Nights (\(sessions.count))")
+                    ForEach(sessions) { s in
+                        NavigationLink { SessionDetailView(session: s) } label: { row(s) }
+                            .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
             }
-            .buttonStyle(.borderedProminent)
-            .padding(.top, 8)
+            .background(Theme.surface0)
+            .navigationTitle("Sleeptracker")
+        }
+    }
 
-            Text("Lock the phone once it starts. Keep it plugged in.")
-                .font(.footnote).foregroundStyle(.tertiary)
-
-            if let err = recorder.lastError {
-                Text(err).font(.caption.monospaced()).foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+    private func row(_ s: NightSession) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(s.tooShort ? Theme.textMuted : (s.survived ? Theme.event : Theme.gap))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Self.dayFormatter.string(from: s.startedAt))
+                    .font(.callout.weight(.medium))
+                Text("\(s.wall.short) · \(s.events.count) events · \(s.audio.short) audio"
+                     + (s.dead > 30 ? " · \(s.dead.short) dead" : ""))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Theme.textMuted)
             }
-            if !recorder.events.isEmpty { eventList }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.textMuted)
         }
-        .padding(28)
+        .padding(13)
+        .background(Theme.surface1, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line, lineWidth: 1))
     }
 
-    private var recordingView: some View {
-        VStack(spacing: 20) {
-            Text(now, format: .dateTime.hour().minute())
-                .font(.system(size: 76, weight: .semibold, design: .monospaced))
-                .foregroundStyle(nightInk)
+    private func reload() { sessions = SessionStore.shared.list() }
 
-            meter
-
-            Text(elapsed).font(.footnote.monospaced()).foregroundStyle(nightInk.opacity(0.7))
-            Text("\(Int(recorder.floorDB)) dB floor · \(recorder.events.count) events"
-                 + (recorder.interruptions > 0 ? " · \(recorder.interruptions) interruptions" : ""))
-                .font(.caption2.monospaced()).foregroundStyle(nightInk.opacity(0.5))
-
-            Button("Stop recording") { recorder.stop() }
-                .font(.subheadline)
-                .tint(nightInk)
-                .buttonStyle(.bordered)
-                .padding(.top, 10)
-        }
-        .padding(28)
-    }
-
-    private var meter: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(white: 0.11))
-                Capsule().fill(nightInk)
-                    .frame(width: geo.size.width * levelFraction)
-            }
-        }
-        .frame(height: 6)
-        .frame(maxWidth: 320)
-        .animation(.linear(duration: 0.1), value: recorder.levelDB)
-    }
-
-    private var eventList: some View {
-        List(recorder.events.reversed()) { e in
-            HStack {
-                Text(e.at, format: .dateTime.hour().minute().second())
-                    .font(.caption.monospaced())
-                Spacer()
-                Text("\(e.duration, specifier: "%.1f")s")
-                    .font(.caption.monospaced()).foregroundStyle(.secondary)
-                Text("\(Int(e.peakDB)) dB")
-                    .font(.caption.monospaced()).foregroundStyle(.secondary)
-            }
-        }
-        .listStyle(.plain)
-        .frame(maxHeight: 260)
-    }
-
-    // MARK: -
-
-    private var nightInk: Color { Color(red: 0.56, green: 0.18, blue: 0.18) }
-
-    private var levelFraction: CGFloat {
-        max(0, min(1, CGFloat((recorder.levelDB + 70) / 70)))
-    }
-
-    private var elapsed: String {
-        guard let started = recorder.startedAt else { return "" }
-        let s = Int(now.timeIntervalSince(started))
-        return String(format: "recording %d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
-    }
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "EEE d MMM, HH:mm"; return f
+    }()
 }

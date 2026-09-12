@@ -35,7 +35,11 @@ targets:
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
-        # Pinned so regenerating the project does not reset what was picked in Xcode's
-        # Signing & Capabilities pane. This is the free personal team; find it again with
-        #   security find-identity -v -p codesigning
+        # The free personal team. Pinned because XcodeGen rewrites the .xcodeproj from
+        # scratch, so whatever is picked in Signing & Capabilities is lost on every
+        # regenerate. Find it again with: security find-identity -v -p codesigning
+        #
+        # Command-line builds additionally need Xcode running, or they fail with "No Account
+        # for Team" — xcodebuild cannot reach the stored Apple ID session on its own. Use
+        # CODE_SIGNING_ALLOWED=NO to type-check without signing.
         DEVELOPMENT_TEAM: H65648747K

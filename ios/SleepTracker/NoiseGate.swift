@@ -13,6 +13,7 @@ struct GateConfig {
     var initialFloorDB = -60.0
     var preRollS = 2.0
     var postRollS = 1.0
+    var maxEnvelopeSeconds = 14 * 3600   // hard cap on retained envelope
 }
 
 struct GateEvent {
@@ -85,8 +86,10 @@ final class NoiseGate {
     private func rollSecond() {
         let sorted = secondBuffer.sorted()
         let p10 = sorted[min(sorted.count - 1, sorted.count / 10)]
-        envelope.append((secondBuffer.reduce(0, +) / Double(secondBuffer.count),
-                         secondBuffer.max() ?? -100, p10))
+        if envelope.count < cfg.maxEnvelopeSeconds {
+            envelope.append((secondBuffer.reduce(0, +) / Double(secondBuffer.count),
+                             secondBuffer.max() ?? -100, p10))
+        }
 
         floorHistory.append(p10)
         if floorHistory.count > cfg.floorWindowS { floorHistory.removeFirst() }
