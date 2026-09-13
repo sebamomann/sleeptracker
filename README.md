@@ -172,8 +172,8 @@ Hence the recorder above.
 | `GATE_DB` | 12 | dB above the rolling floor before an event opens |
 | `OPEN_MS` | 150 | debounce before opening — raise to reject clicks and pops |
 | `CLOSE_MS` | 4000 | quiet before closing. Breathing and snoring arrive in bursts; a short hold chops one episode into unlistenable fragments |
-| `PRE_ROLL_MS` | 2000 | kept before the gate opened, so events don't start mid-snore |
-| `POST_ROLL_MS` | 2000 | kept after it closed, so the tail isn't clipped |
+| `PRE_ROLL_MS` | 4000 | kept before the gate opened, so events don't start mid-snore |
+| `POST_ROLL_MS` | 4000 | kept after it closed. May exceed `CLOSE_MS` — the cut waits for the tail |
 | `FADE_MS` | 40 | raised-cosine ramp at each edge. A clip starts at an arbitrary sample, and that step is audible as a click |
 | `FLOOR_WIN_S` | 60 | rolling window for the noise floor; tracks fans and traffic |
 | `FLOOR_WARMUP_S` | 10 | before which the floor may fall but never rise |

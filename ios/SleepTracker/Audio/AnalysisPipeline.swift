@@ -31,6 +31,8 @@ final class AnalysisPipeline {
     private var eventCounter = 0
     private var nightID = ""
     private var nightStart = Date()
+    /// Events whose tail has not been recorded yet. See `harvest`.
+    private var awaitingTail: [GateEvent] = []
 
     init(sampleRate: Double, ringSeconds: Int, gateConfig: GateConfig = GateConfig()) {
         self.sampleRate = sampleRate
@@ -46,6 +48,7 @@ final class AnalysisPipeline {
             totalSamples = 0
             eventCounter = 0
             health = CaptureHealth()
+            awaitingTail = []
             ring = SampleRing(capacity: Int(sampleRate) * ringSeconds)
             let newGate = NoiseGate(sampleRate: sampleRate, config: gateConfig)
             newGate.onEvent = { [weak self] event in self?.harvest(event) }
@@ -84,10 +87,37 @@ final class AnalysisPipeline {
         }
         totalSamples += samples.count
         health.note(totalSamples: totalSamples, sampleRate: sampleRate)
+        cutReadyEvents()
         onLevel?(gate.floorDB, gate.read())
     }
 
+    /// The gate closes `closeMS` after a sound stops, so at this moment the ring holds only
+    /// that much tail. A post-roll longer than the close hold would be silently clamped by
+    /// `slice`, producing exactly the clipped endings it was raised to prevent — so the cut
+    /// waits until the audio it needs has actually been recorded.
     private func harvest(_ event: GateEvent) {
+        awaitingTail.append(event)
+        cutReadyEvents()
+    }
+
+    private func cutReadyEvents() {
+        guard !awaitingTail.isEmpty else { return }
+        let ready = awaitingTail.filter { totalSamples >= $0.endSample }
+        awaitingTail.removeAll { totalSamples >= $0.endSample }
+        ready.forEach(cut)
+    }
+
+    /// Emit whatever is still waiting, tail or no tail. Called when a night ends: a clipped
+    /// last event beats losing it.
+    func flush() {
+        queue.sync {
+            let remaining = awaitingTail
+            awaitingTail = []
+            remaining.forEach(cut)
+        }
+    }
+
+    private func cut(_ event: GateEvent) {
         guard let ring else { return }
         let samples = ring.slice(from: event.startSample, to: event.endSample)
         // An empty slice means the audio scrolled out of the ring before we reached it.

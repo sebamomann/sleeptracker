@@ -19,8 +19,11 @@ export const DEFAULTS = {
   // episode into a string of unlistenable fragments. Anything quieter than this for less
   // than CLOSE_MS stays inside the same event.
   CLOSE_MS:    4000,
-  PRE_ROLL_MS: 2000,  // kept before the gate opened — otherwise events start mid-snore
-  POST_ROLL_MS: 2000, // ...and after it closed, so the tail is not clipped
+  PRE_ROLL_MS: 4000,  // kept before the gate opened — otherwise events start mid-snore
+  // Kept after it closed. May exceed CLOSE_MS: the recorders defer the cut until the tail
+  // has actually been recorded, rather than letting the ring clamp it back to the close
+  // hold — which would silently reintroduce the clipped endings this exists to prevent.
+  POST_ROLL_MS: 4000,
   FADE_MS:      40,   // ramp at each edge, so a clip does not begin and end with a click
   FLOOR_WIN_S: 60,    // rolling window for the noise floor
   FLOOR_WARMUP_S: 10, // ...before which the floor may only fall, never rise

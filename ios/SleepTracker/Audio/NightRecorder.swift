@@ -100,6 +100,9 @@ final class NightRecorder: ObservableObject {
 
     func stop() {
         engine.stop()
+        // Anything still waiting on its tail is cut now with whatever was recorded: a
+        // slightly short last event beats losing it.
+        pipeline.flush()
         saveTimer?.invalidate(); saveTimer = nil
         lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
         lifecycleObservers.removeAll()

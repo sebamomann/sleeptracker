@@ -21,8 +21,10 @@ struct GateConfig {
     var minEventMS = 400.0 // the sound itself must last this long, roll excluded
     var minPeakDB = -52.0 // ...and be audible in absolute terms, not merely prominent
 
-    var preRollS = 2.0 // kept before the gate opened — events would start mid-snore
-    var postRollS = 2.0 // ...and after it closed, so the tail is not clipped
+    var preRollS = 4.0 // kept before the gate opened — events would start mid-snore
+    /// Kept after it closed. May exceed `closeMS`: AnalysisPipeline defers the cut until
+    /// the tail has actually been recorded, rather than letting the ring clamp it.
+    var postRollS = 4.0
     var fadeMS = 40.0 // ramp at each edge, so a clip has no click at either end
     var maxEnvelopeSeconds = 14 * 3600 // hard cap on retained envelope
 }

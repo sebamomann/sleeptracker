@@ -80,6 +80,7 @@ const ring = new SampleRing({ capacity: RING_S * RATE });
 const index = [];
 const writes = [];
 let seen = 0, lost = 0, bytes = 0;
+const pending = [];   // events whose tail has not been recorded yet
 let acc = 0, nAcc = 0, batch = [], total = 0, rem = Buffer.alloc(0);
 let sampleBytes = 4, decode = (b, i) => b.readFloatLE(i * 4);
 const PER_FRAME = RATE * DEFAULTS.FRAME_MS / 1000;
@@ -114,10 +115,26 @@ function onPcm(chunk) {
   }
 }
 
-/** Cut each newly closed event out of the ring and write it. */
-function harvest() {
-  while (seen < A.events.length) {
-    const ev = A.events[seen++];
+/**
+ * Cut each closed event out of the ring and write it.
+ *
+ * An event is only cut once its tail exists. The gate closes CLOSE_MS after a sound stops,
+ * so at that moment the ring holds only that much tail; a post-roll longer than the close
+ * hold would be clamped by `slice` and silently reintroduce the clipped endings it was
+ * raised to prevent.
+ */
+function harvest({ final = false } = {}) {
+  while (seen < A.events.length) pending.push(A.events[seen++]);
+
+  const ready = final ? pending.splice(0) : [];
+  if (!final) {
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const to = Math.round((pending[i].e + POST_ROLL_S) * RATE);
+      if (total >= to) ready.unshift(...pending.splice(i, 1));
+    }
+  }
+
+  for (const ev of ready) {
     const from = Math.max(0, Math.round((ev.s - PRE_ROLL_S) * RATE));
     const to = Math.round((ev.e + POST_ROLL_S) * RATE);
     const pcm = ring.slice(from, to);
@@ -192,7 +209,7 @@ async function finish(why) {
   if (finishing) return; finishing = true;
   clearInterval(status); clearInterval(saver);
   try { child?.kill('SIGTERM'); } catch {}
-  harvest();
+  harvest({ final: true });   // a short last event beats losing it
   await Promise.allSettled(writes);
   const s = await saveSession(true);
   const R = summarise(s);
