@@ -64,15 +64,17 @@ extension NightSession {
     var byLabel: [LabelTally] {
         var tallies: [String: LabelTally] = [:]
         for event in events {
-            guard let label = event.topLabel else { continue }
-            var tally = tallies[label.identifier] ?? LabelTally(
-                label: label.identifier, display: label.display, count: 0, seconds: 0
+            let kind = event.kind
+            var tally = tallies[kind.rawValue] ?? LabelTally(
+                label: kind.rawValue, display: kind.display, count: 0, seconds: 0
             )
             tally.count += 1
             tally.seconds += event.durationS
-            tallies[label.identifier] = tally
+            tallies[kind.rawValue] = tally
         }
-        return tallies.values.sorted { $0.seconds > $1.seconds }
+        return tallies.values.sorted { lhs, rhs in
+            lhs.seconds == rhs.seconds ? lhs.label < rhs.label : lhs.seconds > rhs.seconds
+        }
     }
 
     var unlabelledEvents: [EventRecord] {
@@ -96,14 +98,18 @@ extension NightSession {
         events.filter(\.isFlagged)
     }
 
+    /// Events corrected by ear — the labelled set a model of your own would train on.
+    var taughtEvents: [EventRecord] {
+        events.filter { $0.userKind != nil }
+    }
+
     var markedEvents: [EventRecord] {
         events.filter(\.isMarked)
     }
 
     /// Total time spent on anything the classifier called snoring.
     var snoringSeconds: Double {
-        events.filter { ($0.topLabel?.identifier.lowercased().contains("snor")) == true }
-            .reduce(0) { $0 + $1.durationS }
+        events.filter { $0.kind == .snoring }.reduce(0) { $0 + $1.durationS }
     }
 
     /// The night in hour-sized pieces — answers "when was it bad", which a flat event list

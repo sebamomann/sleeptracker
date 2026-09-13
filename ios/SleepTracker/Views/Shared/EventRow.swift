@@ -37,13 +37,15 @@ struct EventRow: View {
                             : Fmt.time.string(from: event.at))
                             .font(.rowTitle)
                             .foregroundStyle(Theme.textPrimary)
-                        if let label = event.topLabel {
-                            // Dimmed when the classifier is hesitant, and the number says
-                            // what it is: how sure it is, not how loud or how long.
-                            Text(label.display)
-                                .font(.rowLabel)
-                                .foregroundStyle(label.confidence < 0.5
-                                    ? Theme.textMuted : Theme.signal)
+                        Text(event.kind.display)
+                            .font(.rowLabel)
+                            .foregroundStyle(event.kind == .unclear
+                                ? Theme.textMuted : Theme.signal)
+                        if event.kindWasCorrected {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Theme.event)
+                        } else if let label = event.topLabel, event.kind != .unclear {
                             Text("\(Int(label.confidence * 100))% sure")
                                 .font(.rowMeta)
                                 .foregroundStyle(Theme.textMuted)

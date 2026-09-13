@@ -1,3 +1,4 @@
+import CoreML
 import Foundation
 import SoundAnalysis
 
@@ -12,7 +13,22 @@ final class EventClassifier {
 
     private let request: SNClassifySoundRequest?
 
+    /// Which model is answering, for the night's log.
+    private(set) var source = "Apple's built-in classifier"
+
     init() {
+        // A model trained on your own corrected clips, if one has been dropped into the
+        // bundle. Apple's is general-purpose and trained on ordinary listening levels; a
+        // night recording is quiet, close and mostly breathing, which is why so much of it
+        // comes back as `music`. Create ML's Sound Classification template takes the folders
+        // that `TrainingExport` writes and produces exactly this file.
+        if let url = Bundle.main.url(forResource: "SleepSounds", withExtension: "mlmodelc"),
+           let model = try? MLModel(contentsOf: url),
+           let custom = try? SNClassifySoundRequest(mlModel: model) {
+            request = custom
+            source = "SleepSounds — trained on your nights"
+            return
+        }
         request = try? SNClassifySoundRequest(classifierIdentifier: .version1)
     }
 

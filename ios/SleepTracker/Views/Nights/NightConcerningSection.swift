@@ -25,7 +25,7 @@ struct NightConcerningSection: View {
                         entry(
                             icon: player.playingIndex == event.index
                                 ? "stop.circle.fill" : "play.circle",
-                            text: event.topLabel?.display ?? "Unusual sound",
+                            text: event.kind.display,
                             at: event.at
                         )
                     }

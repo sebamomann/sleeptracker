@@ -117,6 +117,9 @@ private struct RecordTab: View {
                     SectionHeader("Sensitivity")
                     SensitivityCard()
 
+                    SectionHeader("Teach it")
+                    TrainingCard(store: nights)
+
                     reminderRow
                 }
                 .padding(Layout.gutter)

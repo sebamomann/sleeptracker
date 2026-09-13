@@ -32,6 +32,10 @@ targets:
         # Recording runs with the screen off; there is nothing to see in landscape.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UILaunchScreen: {}
+        # So the training folder and the nights can be dragged off the phone in Finder,
+        # which is how the labelled clips reach Create ML.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     preBuildScripts:
       # Lint on every build, so violations arrive as Xcode warnings next to the code rather
       # than from a terminal command someone has to remember. Not --strict here: a warning

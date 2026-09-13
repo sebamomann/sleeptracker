@@ -164,7 +164,7 @@ private struct Builder {
             take(
                 Highlight(
                     event: event,
-                    reason: .notable(event.topLabel?.display ?? "Unusual sound"),
+                    reason: .notable(event.kind.display),
                     id: "notable-\(event.index)"
                 ),
                 event: event,
@@ -215,7 +215,7 @@ private struct Builder {
             take(
                 Highlight(
                     event: best,
-                    reason: .representative(best.topLabel?.display ?? label),
+                    reason: .representative(best.kind.display),
                     id: "rep-\(best.index)"
                 ),
                 event: best,

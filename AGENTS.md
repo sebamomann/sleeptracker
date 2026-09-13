@@ -74,6 +74,15 @@ threshold is visible rather than silent. `Relevance` is the after-the-fact versi
 nights recorded before a rule changed; it never touches anything marked, transcribed, or
 recognised as snoring, speech or coughing.
 
+**Never show a raw classifier identifier.** Apple's model knows ~300 general-purpose sounds
+at ordinary listening levels; a night recording is quiet, close and mostly breathing, so it
+falls back on whichever class attracts most. Everything user-facing goes through `SoundKind`,
+which maps its output into the handful of things that happen in a bedroom and returns
+`unclear` for anything unconvincing. `unclear` is honest; `music` at 3am is not. A correction
+made by ear (`userKind`) beats the model outright and is exported by `TrainingExport` as
+Create ML training data; `EventClassifier` prefers a bundled `SleepSounds.mlmodelc` over
+Apple's and records which one it used.
+
 **`music` means the classifier gave up.** It is what SoundAnalysis reaches for when a clip
 carries too little information to identify, so a low-confidence catch-all label on a quiet
 clip is "nothing happened", not a finding. See `Relevance.vagueLabels`.

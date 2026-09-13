@@ -44,6 +44,9 @@ struct NightSession: Codable, Identifiable {
         /// property's default value for a missing key, it throws — so a non-optional Bool
         /// here would make every night recorded before starring existed unreadable.
         var starred: Bool?
+        /// A correction made by ear. Beats anything the classifier said, and is the labelled
+        /// data a better model would be trained on.
+        var userKind: String?
         /// Separate from the star on purpose: a star keeps something because it is
         /// interesting, a flag keeps it because it is worrying. Collapsing them would make
         /// the favourites view unable to tell curiosity from concern.
