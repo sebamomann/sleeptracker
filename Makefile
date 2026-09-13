@@ -28,6 +28,12 @@ tools: ## Install the Swift toolchain, and warn if it drifts from CI
 project: ## Regenerate the Xcode project from ios/project.yml
 	cd ios && xcodegen generate
 
+# Regenerated only when the spec actually changes. `build: project` rebuilt it on every
+# single build, which threw away everything Xcode had resolved for the project — including
+# the provisioning it works out when a device connects.
+$(XCODE_PROJECT): ios/project.yml
+	cd ios && xcodegen generate
+
 lint: ## SwiftLint (strict) and SwiftFormat, check only
 	swiftlint lint --strict --quiet
 	swiftformat --lint .
@@ -42,7 +48,7 @@ test: ## The analysis suite — the gate's rules live in public/analysis.js
 dupes: ## Copy-paste detection, across Swift and JS in one pass
 	npx --yes jscpd@$(JSCPD_VERSION) . --config .jscpd.json --reporters console
 
-build: project ## Compile the iOS target, unsigned
+build: $(XCODE_PROJECT) ## Compile the iOS target, unsigned
 	@mkdir -p build
 	@xcodebuild -project $(XCODE_PROJECT) -scheme SleepTracker -configuration Debug \
 		-destination 'generic/platform=iOS' -derivedDataPath build/xcode \

@@ -45,6 +45,13 @@ targets:
           else
             echo "warning: swiftlint not installed — run 'make tools' in the repo root"
           fi
+    # Xcode's Signing & Capabilities pane reads TargetAttributes, not the build settings.
+    # With the team only in `settings` below, xcodebuild was satisfied but the GUI showed
+    # signing as unconfigured and asked for the team again on every reconnect — the setting
+    # was there, the pane just was not reading it.
+    attributes:
+      ProvisioningStyle: Automatic
+      DevelopmentTeam: H65648747K
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.sebamomann.sleeptracker
