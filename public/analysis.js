@@ -275,3 +275,96 @@ export function findQuietGaps({ envelope, events, floorDb }, cfg = DEFAULTS) {
   closeRun(envelope.length);
   return gaps;
 }
+
+/* ── self-calibration ───────────────────────────────────────────────────────
+ * The thresholds that decide what counts as an event cannot be written down
+ * once. They depend on the room, on how far the phone sits from the bed, and on
+ * that phone's microphone gain — a night that peaks at -20 dBFS on the pillow and
+ * one that peaks at -45 across the room need different numbers to mean the same
+ * thing. So the app learns them from its own nights.
+ */
+
+export const CALIBRATION = {
+  /** Events per hour the gate aims to produce. The one number a person should set. */
+  TARGET_PER_HOUR: 4,
+  /** Nights of history to judge by. Long enough to smooth a noisy night, short
+   *  enough to follow a phone moved to the other side of the bed. */
+  WINDOW: 5,
+  /** Most the gate may move in one night, so it converges instead of oscillating. */
+  MAX_STEP_DB: 2,
+  GATE_MIN_DB: 10,
+  GATE_MAX_DB: 26,
+  /** How far below the room's typical event peak the absolute floor sits. */
+  PEAK_MARGIN_DB: 12,
+  PEAK_MIN_DB: -60,
+  PEAK_MAX_DB: -30,
+  /** Shorter nights are not evidence: a ten-minute test says nothing about a night. */
+  MIN_HOURS: 0.5,
+};
+
+/**
+ * New thresholds from past nights.
+ *
+ * `history` is most-recent-first, each `{ hours, events, medianPeakDb }`. `current`
+ * is what was used last night. Returns the same shape plus the reasoning, because a
+ * threshold that changes itself has to be able to say why.
+ */
+export function calibrate(history = [], current = {}, cfg = CALIBRATION) {
+  const gate = current.gateDb ?? DEFAULTS.GATE_DB;
+  const minPeak = current.minPeakDb ?? DEFAULTS.MIN_PEAK_DB;
+
+  const usable = history
+    .filter(n => n && n.hours >= cfg.MIN_HOURS && Number.isFinite(n.events))
+    .slice(0, cfg.WINDOW);
+
+  if (!usable.length) {
+    return { gateDb: gate, minPeakDb: minPeak, nights: 0,
+             why: 'no nights yet — using the starting values' };
+  }
+
+  const rate = median(usable.map(n => n.events / n.hours));
+
+  // Proportional in octaves, so the response is the same whether the rate is four
+  // times too high or four times too low. A doubling is one step of MAX_STEP_DB×1.5,
+  // clamped — the clamp is what stops one loud night swinging the gate wide open.
+  const error = rate > 0 ? Math.log2(rate / cfg.TARGET_PER_HOUR) : -1;
+  const step = Math.max(-cfg.MAX_STEP_DB, Math.min(cfg.MAX_STEP_DB, error * 1.5));
+  const gateDb = +Math.max(cfg.GATE_MIN_DB,
+                           Math.min(cfg.GATE_MAX_DB, gate + step)).toFixed(1);
+
+  // The absolute floor follows what this room actually produces, which is the part
+  // that cannot be guessed: it is set by microphone gain and by how far away the
+  // phone sleeps.
+  const peaks = usable.map(n => n.medianPeakDb).filter(Number.isFinite);
+  const minPeakDb = peaks.length
+    ? +Math.max(cfg.PEAK_MIN_DB,
+                Math.min(cfg.PEAK_MAX_DB, median(peaks) - cfg.PEAK_MARGIN_DB)).toFixed(1)
+    : minPeak;
+
+  return {
+    gateDb,
+    minPeakDb,
+    nights: usable.length,
+    ratePerHour: +rate.toFixed(1),
+    why: describe(rate, cfg.TARGET_PER_HOUR, gateDb - gate),
+  };
+}
+
+function describe(rate, target, delta) {
+  const rounded = Math.round(rate * 10) / 10;
+  if (Math.abs(delta) < 0.2) return `${rounded}/h, about the target of ${target} — holding`;
+  return delta > 0
+    ? `${rounded}/h against a target of ${target} — listening less closely`
+    : `${rounded}/h against a target of ${target} — listening more closely`;
+}
+
+/** One night, reduced to what calibration needs. */
+export function nightStats(session) {
+  const hours = (session.wallMs ?? 0) / 3_600_000;
+  const peaks = (session.events ?? []).map(e => e.peak).filter(Number.isFinite);
+  return {
+    hours: +hours.toFixed(3),
+    events: (session.events ?? []).length,
+    medianPeakDb: peaks.length ? median(peaks) : null,
+  };
+}

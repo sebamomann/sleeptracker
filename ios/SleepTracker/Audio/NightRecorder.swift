@@ -39,7 +39,12 @@ final class NightRecorder: ObservableObject {
 
     init() {
         writer = EventWriter(format: engine.workFormat)
-        pipeline = AnalysisPipeline(sampleRate: CaptureEngine.sampleRate, ringSeconds: 120)
+        // Tonight runs on what the last few nights taught it, not on constants.
+        pipeline = AnalysisPipeline(
+            sampleRate: CaptureEngine.sampleRate,
+            ringSeconds: 120,
+            gateConfig: Calibration.config()
+        )
 
         engine.onSamples = { [weak self] samples in
             // On the audio thread: hand off and return immediately.
@@ -67,6 +72,11 @@ final class NightRecorder: ObservableObject {
         let now = Date()
         let id = Fmt.sessionID.string(from: now)
         session = NightSession.beginning(id: id, at: now)
+        let settings = Calibration.config()
+        session?.gateDbUsed = settings.gateDB
+        session?.minPeakDbUsed = settings.minPeakDB
+        mark("gate \(Int(settings.gateDB)) dB over floor, ignoring under "
+            + "\(Int(settings.minPeakDB)) dBFS")
         pipeline.begin(nightID: id, at: now)
 
         do {
@@ -107,6 +117,8 @@ final class NightRecorder: ObservableObject {
             }
             session = s
             try? store.save(s)
+            // Feed the night back, so tomorrow starts from what tonight showed.
+            Calibration.learn(from: s)
         }
 
         policy.deactivate()

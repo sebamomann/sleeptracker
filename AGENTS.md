@@ -56,6 +56,15 @@ made only in Swift is untested by definition.
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
 own `DateFormatter` that had already drifted. Add to `Design/` instead.
 
+**The thresholds are learned, not written down.** `Calibration` moves the gate toward
+whatever produces the target events per hour, and sets the absolute floor from the peaks the
+room actually produces — the part that genuinely cannot be guessed, since it is set by
+microphone gain and by how far the phone sleeps from the bed. It is proportional in octaves,
+capped at 2 dB a night so one noisy night cannot swing it, and bounded at both ends. Change
+the rules in `calibrate()` in `public/analysis.js`, where a test asserts it converges rather
+than oscillates, then port. Each night records the values it ran with, so an old night can
+be read against its own settings.
+
 **An event has to clear three rules, not one.** Prominence above the rolling floor was the
 only test, and one real night produced 102 events of which most were rustles and room tone:
 in a quiet room the floor sits so low that anything clears it, and pre/post roll turns a

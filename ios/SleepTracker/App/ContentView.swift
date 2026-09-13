@@ -114,6 +114,9 @@ private struct RecordTab: View {
                         .buttonStyle(.plain)
                     }
 
+                    SectionHeader("Sensitivity")
+                    SensitivityCard()
+
                     reminderRow
                 }
                 .padding(Layout.gutter)

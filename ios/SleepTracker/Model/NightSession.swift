@@ -111,6 +111,10 @@ struct NightSession: Codable, Identifiable {
     /// to the events kept means the threshold is doing its job; absurdly high means it is
     /// set wrong.
     var rejectedEvents: Int?
+    /// The learned thresholds this night actually ran with, so a night can be read against
+    /// the settings that produced it rather than against today's.
+    var gateDbUsed: Double?
+    var minPeakDbUsed: Double?
     /// Wall clock of the most recent audio callback. The only record of when capture
     /// stopped, if it stopped and never resumed.
     var lastFrameAtMs: Double?

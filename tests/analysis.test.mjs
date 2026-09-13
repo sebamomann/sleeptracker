@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise, findQuietGaps } from '../public/analysis.js';
+import {
+  NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise, findQuietGaps,
+  calibrate, nightStats, CALIBRATION,
+} from '../public/analysis.js';
 import { buildSilentWav } from '../public/silent-audio.js';
 import { fadeEdges } from '../public/wav.js';
 
@@ -395,4 +398,85 @@ test('a real snore clears both rules', () => {
   run(a, 60 * 50, t => ((t % 20) < 4 ? -26 : -58));
   assert.ok(a.events.length >= 2);
   assert.ok(a.events.every(e => e.peak >= DEFAULTS.MIN_PEAK_DB));
+});
+
+/* ── self-calibration ─────────────────────────────────────────────────────── */
+
+const night = (events, hours = 8, medianPeakDb = -30) => ({ hours, events, medianPeakDb });
+
+test('too many events a night makes the gate listen less closely', () => {
+  // The real complaint: 102 events in roughly eight hours, about 13/h against a target of 4.
+  const out = calibrate([night(102)], { gateDb: 15, minPeakDb: -52 });
+  assert.ok(out.gateDb > 15, `gate went to ${out.gateDb}, expected higher`);
+  assert.match(out.why, /listening less closely/);
+});
+
+test('too few events makes it listen more closely', () => {
+  const out = calibrate([night(4)], { gateDb: 20, minPeakDb: -40 });
+  assert.ok(out.gateDb < 20);
+  assert.match(out.why, /listening more closely/);
+});
+
+test('a night already on target holds still', () => {
+  const out = calibrate([night(32)], { gateDb: 15, minPeakDb: -45 });
+  assert.equal(out.gateDb, 15);
+  assert.match(out.why, /holding/);
+});
+
+test('one night cannot swing the gate wide open', () => {
+  // A party next door should not deafen the app for a week.
+  const out = calibrate([night(4000)], { gateDb: 15, minPeakDb: -45 });
+  assert.ok(out.gateDb <= 15 + CALIBRATION.MAX_STEP_DB);
+});
+
+test('it converges on the target instead of oscillating', () => {
+  // Feed back a rate that responds to the gate: every extra dB halves the events.
+  let current = { gateDb: 12, minPeakDb: -45 };
+  let events = 102;
+  for (let i = 0; i < 12; i++) {
+    const next = calibrate([night(events)], current);
+    events = Math.max(1, Math.round(events / Math.pow(2, next.gateDb - current.gateDb)));
+    current = next;
+  }
+  const finalRate = events / 8;
+  assert.ok(Math.abs(finalRate - CALIBRATION.TARGET_PER_HOUR) < 2,
+    `settled at ${finalRate.toFixed(1)}/h, target ${CALIBRATION.TARGET_PER_HOUR}`);
+  assert.ok(current.gateDb >= CALIBRATION.GATE_MIN_DB);
+  assert.ok(current.gateDb <= CALIBRATION.GATE_MAX_DB);
+});
+
+test('the absolute floor follows the room, not a constant', () => {
+  // A phone on the pillow hears everything louder than one across the room, and the
+  // same written-down -52 dBFS means something different in each.
+  const near = calibrate([night(32, 8, -20)], { gateDb: 15, minPeakDb: -52 });
+  const far = calibrate([night(32, 8, -44)], { gateDb: 15, minPeakDb: -52 });
+  assert.ok(near.minPeakDb > far.minPeakDb,
+    `near ${near.minPeakDb} should sit above far ${far.minPeakDb}`);
+  assert.equal(near.minPeakDb, -32);
+  assert.equal(far.minPeakDb, -56);
+});
+
+test('short nights are not evidence', () => {
+  const out = calibrate([night(60, 0.1)], { gateDb: 15, minPeakDb: -52 });
+  assert.equal(out.nights, 0);
+  assert.equal(out.gateDb, 15);
+  assert.match(out.why, /no nights yet/);
+});
+
+test('thresholds stay inside their bounds however extreme the history', () => {
+  let current = { gateDb: 15, minPeakDb: -52 };
+  for (let i = 0; i < 30; i++) current = calibrate([night(100_000)], current);
+  assert.equal(current.gateDb, CALIBRATION.GATE_MAX_DB);
+  for (let i = 0; i < 30; i++) current = calibrate([night(0)], current);
+  assert.equal(current.gateDb, CALIBRATION.GATE_MIN_DB);
+});
+
+test('nightStats reduces a session to what calibration needs', () => {
+  const stats = nightStats({
+    wallMs: 8 * 3_600_000,
+    events: [{ peak: -20 }, { peak: -30 }, { peak: -40 }],
+  });
+  assert.equal(stats.hours, 8);
+  assert.equal(stats.events, 3);
+  assert.equal(stats.medianPeakDb, -30);
 });

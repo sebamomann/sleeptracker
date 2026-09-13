@@ -17,6 +17,7 @@ final class AnalysisPipeline {
 
     private let sampleRate: Double
     private let ringSeconds: Int
+    private let gateConfig: GateConfig
     private let queue = DispatchQueue(
         label: "de.sebamomann.sleeptracker.analysis",
         qos: .userInitiated
@@ -31,9 +32,10 @@ final class AnalysisPipeline {
     private var nightID = ""
     private var nightStart = Date()
 
-    init(sampleRate: Double, ringSeconds: Int) {
+    init(sampleRate: Double, ringSeconds: Int, gateConfig: GateConfig = GateConfig()) {
         self.sampleRate = sampleRate
         self.ringSeconds = ringSeconds
+        self.gateConfig = gateConfig
     }
 
     /// Begin a night. Safe to call before any samples arrive, and only then.
@@ -45,7 +47,7 @@ final class AnalysisPipeline {
             eventCounter = 0
             health = CaptureHealth()
             ring = SampleRing(capacity: Int(sampleRate) * ringSeconds)
-            let newGate = NoiseGate(sampleRate: sampleRate)
+            let newGate = NoiseGate(sampleRate: sampleRate, config: gateConfig)
             newGate.onEvent = { [weak self] event in self?.harvest(event) }
             gate = newGate
         }
