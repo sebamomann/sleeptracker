@@ -112,7 +112,11 @@ final class NightsStore: ObservableObject {
     func markedByNight(_ filter: MarkFilter = .all)
         -> [(night: NightSession, events: [NightSession.EventRecord])] {
         sessions
-            .map { ($0, $0.events.filter(filter.matches).sorted { $0.atMs < $1.atMs }) }
+            .map { night in
+                (night, night.events.filter(filter.matches).sorted { lhs, rhs in
+                    lhs.atMs == rhs.atMs ? lhs.index < rhs.index : lhs.atMs < rhs.atMs
+                })
+            }
             .filter { !$0.1.isEmpty }
             .sorted { $0.0.t0 > $1.0.t0 }
     }

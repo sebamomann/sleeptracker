@@ -86,6 +86,42 @@ private struct Builder {
     private var usedLabels: Set<String> = []
     private var usedEvents: Set<Int> = []
 
+    // Every ordering below breaks ties on the event index. Swift's sort is not stable, so a
+    // comparison on one key alone lets equal elements swap places each time the reel is
+    // rebuilt — and it is rebuilt on every render, including when playback starts. That is
+    // what made rows jump around while they were playing.
+
+    private func longerTranscript(
+        _ lhs: NightSession.EventRecord,
+        _ rhs: NightSession.EventRecord
+    ) -> Bool {
+        let left = lhs.transcript?.count ?? 0
+        let right = rhs.transcript?.count ?? 0
+        return left == right ? lhs.index < rhs.index : left > right
+    }
+
+    private func moreConfident(
+        _ lhs: NightSession.EventRecord,
+        _ rhs: NightSession.EventRecord
+    ) -> Bool {
+        let left = lhs.topLabel?.confidence ?? 0
+        let right = rhs.topLabel?.confidence ?? 0
+        return left == right ? lhs.index < rhs.index : left > right
+    }
+
+    /// Ascending by clarity — confidence weighted by duration, so a confident three-second
+    /// clip beats a marginal twenty-second one but a long clear one wins outright. Written
+    /// ascending so `max(by:)` can use it, with ties resolved on index so the maximum is the
+    /// same element on every rebuild.
+    private func lessClear(
+        _ lhs: NightSession.EventRecord,
+        _ rhs: NightSession.EventRecord
+    ) -> Bool {
+        let left = (lhs.topLabel?.confidence ?? 0) * lhs.durationS
+        let right = (rhs.topLabel?.confidence ?? 0) * rhs.durationS
+        return left == right ? lhs.index > rhs.index : left < right
+    }
+
     private mutating func take(
         _ highlight: Highlight,
         event: NightSession.EventRecord?,
@@ -105,7 +141,7 @@ private struct Builder {
     mutating func addSpoken(from session: NightSession) {
         let spoken = session.events
             .filter { !($0.transcript ?? "").isEmpty }
-            .sorted { ($0.transcript?.count ?? 0) > ($1.transcript?.count ?? 0) }
+            .sorted { longerTranscript($0, $1) }
         for event in spoken.prefix(3) {
             take(
                 Highlight(
@@ -123,7 +159,7 @@ private struct Builder {
     mutating func addNotable(from session: NightSession) {
         let notable = session.events
             .filter { Highlights.isNotable($0) && !usedEvents.contains($0.index) }
-            .sorted { ($0.topLabel?.confidence ?? 0) > ($1.topLabel?.confidence ?? 0) }
+            .sorted { moreConfident($0, $1) }
         for event in notable.prefix(2) {
             take(
                 Highlight(
@@ -139,7 +175,10 @@ private struct Builder {
 
     /// Pauses inside an episode. These have no audio of their own, so they carry no event.
     mutating func addPauses(from session: NightSession) {
-        let longest = (session.quietGaps ?? []).sorted { $0.durationS > $1.durationS }
+        let longest = (session.quietGaps ?? []).sorted { lhs, rhs in
+            lhs.durationS == rhs.durationS ? lhs.startS < rhs.startS
+                : lhs.durationS > rhs.durationS
+        }
         for gap in longest.prefix(2) {
             reel.append(Highlight(
                 event: nil,
@@ -158,7 +197,12 @@ private struct Builder {
         )
         let byRarity = groups
             .filter { !usedLabels.contains($0.key) }
-            .sorted { $0.value.count < $1.value.count }
+            .sorted { lhs, rhs in
+                // Dictionary order is arbitrary and the sort is unstable, so count alone
+                // left same-sized groups to land in a different order every time.
+                lhs.value.count == rhs.value.count ? lhs.key < rhs.key
+                    : lhs.value.count < rhs.value.count
+            }
 
         for (label, events) in byRarity {
             guard reel.count < limit else { return }
@@ -166,10 +210,7 @@ private struct Builder {
             // clip beats a marginal twenty-second one, but a long clear one wins outright.
             let best = events
                 .filter { !usedEvents.contains($0.index) }
-                .max { lhs, rhs in
-                    (lhs.topLabel?.confidence ?? 0) * lhs.durationS
-                        < (rhs.topLabel?.confidence ?? 0) * rhs.durationS
-                }
+                .max(by: lessClear)
             guard let best else { continue }
             take(
                 Highlight(
@@ -186,8 +227,10 @@ private struct Builder {
     /// If nothing was labelled at all, the loudest moment keeps the reel from being empty on
     /// a night that clearly recorded something.
     mutating func addFallback(from session: NightSession) {
-        guard reel.isEmpty, let loudest = session.events.max(by: { $0.peakDb < $1.peakDb })
-        else { return }
+        let loudest = session.events.max { lhs, rhs in
+            lhs.peakDb == rhs.peakDb ? lhs.index > rhs.index : lhs.peakDb < rhs.peakDb
+        }
+        guard reel.isEmpty, let loudest else { return }
         reel.append(Highlight(event: loudest, reason: .loudest, id: "loudest-\(loudest.index)"))
     }
 }

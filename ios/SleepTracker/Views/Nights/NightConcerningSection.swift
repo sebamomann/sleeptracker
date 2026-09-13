@@ -10,7 +10,10 @@ struct NightConcerningSection: View {
 
     var body: some View {
         let notable = session.notableEvents
-        let gaps = (session.quietGaps ?? []).sorted { $0.durationS > $1.durationS }
+        let gaps = (session.quietGaps ?? []).sorted { lhs, rhs in
+            lhs.durationS == rhs.durationS ? lhs.startS < rhs.startS
+                : lhs.durationS > rhs.durationS
+        }
 
         if !notable.isEmpty || !gaps.isEmpty {
             SectionHeader("Worth attention")
