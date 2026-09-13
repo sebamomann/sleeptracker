@@ -143,6 +143,13 @@ struct NightCaptureSection: View {
                     tint: Theme.gap
                 )
             }
+            if let rejected = session.rejectedEvents, rejected > 0 {
+                StatTile(
+                    label: "Not worth a file",
+                    value: "\(rejected)",
+                    note: "too short or too quiet for the gate"
+                )
+            }
             if session.droppedEvents > 0 {
                 StatTile(
                     label: "Dropped",

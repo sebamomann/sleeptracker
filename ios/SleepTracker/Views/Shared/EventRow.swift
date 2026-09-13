@@ -21,10 +21,7 @@ struct EventRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 10) {
                 Button {
-                    player.toggle(
-                        url: SessionStore.shared.url(forEvent: event, in: sessionID),
-                        index: event.index
-                    )
+                    player.toggle(event, in: sessionID)
                 } label: {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle")
                         .font(.title3)
@@ -41,10 +38,13 @@ struct EventRow: View {
                             .font(.rowTitle)
                             .foregroundStyle(Theme.textPrimary)
                         if let label = event.topLabel {
+                            // Dimmed when the classifier is hesitant, and the number says
+                            // what it is: how sure it is, not how loud or how long.
                             Text(label.display)
                                 .font(.rowLabel)
-                                .foregroundStyle(Theme.signal)
-                            Text("\(Int(label.confidence * 100))%")
+                                .foregroundStyle(label.confidence < 0.5
+                                    ? Theme.textMuted : Theme.signal)
+                            Text("\(Int(label.confidence * 100))% sure")
                                 .font(.rowMeta)
                                 .foregroundStyle(Theme.textMuted)
                         }

@@ -66,6 +66,7 @@ final class AnalysisPipeline {
             guard let gate else { return }
             session.floorDb = gate.floorDB
             session.thresholdDb = gate.threshold
+            session.rejectedEvents = gate.rejected
             session.envelope = gate.envelope.map(\.rounded)
         }
     }

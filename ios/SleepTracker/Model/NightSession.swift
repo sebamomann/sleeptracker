@@ -107,6 +107,10 @@ struct NightSession: Codable, Identifiable {
     var knownLabels: [String]?
     /// Near-silent stretches bracketed by sound. Computed at stop; see QuietGaps.
     var quietGaps: [QuietGap]?
+    /// Gate openings discarded as too short or too quiet to be worth a file. High relative
+    /// to the events kept means the threshold is doing its job; absurdly high means it is
+    /// set wrong.
+    var rejectedEvents: Int?
     /// Wall clock of the most recent audio callback. The only record of when capture
     /// stopped, if it stopped and never resumed.
     var lastFrameAtMs: Double?

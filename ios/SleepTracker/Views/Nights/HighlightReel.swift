@@ -37,8 +37,8 @@ struct HighlightReel: View {
     private func row(_ h: Highlight) -> some View {
         let playable = h.event.map { files.url(forEvent: $0, in: session.id) }
         Button {
-            if let url = playable, let e = h.event {
-                player.toggle(url: url, index: e.index)
+            if let event = h.event {
+                player.toggle(event, in: session.id)
             }
         } label: {
             HStack(alignment: .top, spacing: 12) {

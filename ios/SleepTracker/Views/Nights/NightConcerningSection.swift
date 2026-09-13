@@ -17,13 +17,7 @@ struct NightConcerningSection: View {
             VStack(alignment: .leading, spacing: Layout.loose) {
                 ForEach(notable) { event in
                     Button {
-                        player.toggle(
-                            url: SessionStore.shared.url(
-                                forEvent: event,
-                                in: session.id
-                            ),
-                            index: event.index
-                        )
+                        player.toggle(event, in: session.id)
                     } label: {
                         entry(
                             icon: player.playingIndex == event.index

@@ -56,6 +56,24 @@ made only in Swift is untested by definition.
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
 own `DateFormatter` that had already drifted. Add to `Design/` instead.
 
+**An event has to clear three rules, not one.** Prominence above the rolling floor was the
+only test, and one real night produced 102 events of which most were rustles and room tone:
+in a quiet room the floor sits so low that anything clears it, and pre/post roll turns a
+150 ms tick into a four-second file that sounds like silence. `MIN_EVENT_MS` and
+`MIN_PEAK_DB` are the other two, and rejections are counted into the session so a wrong
+threshold is visible rather than silent. `Relevance` is the after-the-fact version for
+nights recorded before a rule changed; it never touches anything marked, transcribed, or
+recognised as snoring, speech or coughing.
+
+**`music` means the classifier gave up.** It is what SoundAnalysis reaches for when a clip
+carries too little information to identify, so a low-confidence catch-all label on a quiet
+clip is "nothing happened", not a finding. See `Relevance.vagueLabels`.
+
+**Playback is amplified, files are not.** Sleep audio peaks around −30 dBFS and is inaudible
+played back untouched, and `AVAudioPlayer.volume` cannot exceed 1.0 — hence AVAudioEngine
+with an EQ node lifting each clip toward −6 dBFS using its recorded peak. `peakDb` stays the
+true measurement; the boost lives only in the signal path.
+
 **The spectral ramp is for data only.** `Theme.spectrum` — violet, cyan, mint, amber — paints
 bars, chart fills and classifier output, and nothing else. Structure, labels and chrome stay
 greyscale, which is what leaves the numbers as the only colour on a screen. `Theme.gap` sits

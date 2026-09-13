@@ -5,7 +5,7 @@ import Foundation
 /// two in step when tuning.
 struct GateConfig {
     var frameMS = 20.0
-    var gateDB = 12.0 // open this far above the rolling floor
+    var gateDB = 15.0 // open this far above the rolling floor
     var openMS = 150.0 // sustained, before an event opens
     /// Sustained below threshold before the gate closes. Generous on purpose: breathing and
     /// snoring come in bursts with seconds of quiet between them, and a short hold chops one
@@ -14,6 +14,13 @@ struct GateConfig {
     var floorWindowS = 60 // rolling window for the noise floor
     var floorWarmupS = 10 // ...before which the floor may fall but never rise
     var initialFloorDB = -60.0
+    /// Two rules that exist because a real night produced 102 events and most were nothing.
+    /// A relative threshold alone is not enough: in a very quiet room the floor sits so low
+    /// that a rustle clears it, and with roll a 150 ms tick becomes a four-second file that
+    /// sounds like silence. Mirrors MIN_EVENT_MS / MIN_PEAK_DB in public/analysis.js.
+    var minEventMS = 400.0 // the sound itself must last this long, roll excluded
+    var minPeakDB = -52.0 // ...and be audible in absolute terms, not merely prominent
+
     var preRollS = 2.0 // kept before the gate opened — events would start mid-snore
     var postRollS = 2.0 // ...and after it closed, so the tail is not clipped
     var fadeMS = 40.0 // ramp at each edge, so a clip has no click at either end
@@ -35,6 +42,8 @@ final class NoiseGate {
     private(set) var floorDB: Double
     private(set) var envelope: [EnvelopeSample] = []
     private(set) var peakSinceRead = -100.0
+    /// Gate openings discarded as too short or too quiet.
+    private(set) var rejected = 0
 
     private var secondBuffer: [Double] = []
     private var floorHistory: [Double] = []
@@ -146,9 +155,17 @@ final class NoiseGate {
 
         let startFrame = openedAtFrame
         let endFrame = frameIndex - belowFrames
-        let start = Int((Double(startFrame) * cfg.frameMS / 1000.0 - cfg.preRollS) * sampleRate)
-        let end = Int((Double(endFrame) * cfg.frameMS / 1000.0 + cfg.postRollS) * sampleRate)
-        onEvent?(GateEvent(startSample: max(0, start), endSample: end, peakDB: eventPeak))
+        let soundMS = Double(endFrame - startFrame) * cfg.frameMS
+
+        if soundMS >= cfg.minEventMS, eventPeak >= cfg.minPeakDB {
+            let start = Int((Double(startFrame) * cfg.frameMS / 1000 - cfg.preRollS) * sampleRate)
+            let end = Int((Double(endFrame) * cfg.frameMS / 1000 + cfg.postRollS) * sampleRate)
+            onEvent?(GateEvent(startSample: max(0, start), endSample: end, peakDB: eventPeak))
+        } else {
+            // Counted rather than silently dropped: a night that rejects thousands means the
+            // threshold is wrong, not that the room was busy.
+            rejected += 1
+        }
 
         open = false
         aboveFrames = 0

@@ -71,6 +71,22 @@ final class NightsStore: ObservableObject {
         }
     }
 
+    /// Remove specific events from a night, files and all.
+    ///
+    /// Used by the tidy-up, which offers to drop events that look like nothing. The audio
+    /// goes with the record — leaving orphaned files behind would quietly fill the phone
+    /// with clips nothing can reach.
+    func deleteEvents(sessionID: String, indices: Set<Int>) {
+        update(id: sessionID) { session in
+            for event in session.events where indices.contains(event.index) {
+                try? FileManager.default.removeItem(
+                    at: self.store.url(forEvent: event, in: sessionID)
+                )
+            }
+            session.events.removeAll { indices.contains($0.index) }
+        }
+    }
+
     func delete(id: String) {
         store.delete(id: id)
         sessions.removeAll { $0.id == id }

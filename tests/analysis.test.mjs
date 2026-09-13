@@ -362,3 +362,37 @@ test('findQuietGaps tolerates missing input', () => {
   assert.deepEqual(findQuietGaps({ envelope: [], events: [], floorDb: -60 }), []);
   assert.deepEqual(findQuietGaps({}), []);
 });
+
+/* ── rejecting what isn't an event ────────────────────────────────────────── */
+
+test('a brief tick does not become a four-second file', () => {
+  // The shape that produced most of a real night's 102 events: something 200 ms long, which
+  // pre- and post-roll then pad into a clip that sounds like silence with a click in it.
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => ((t % 10) < 0.2 ? -20 : -60));
+  assert.equal(a.events.length, 0, 'ticks shorter than MIN_EVENT_MS must be dropped');
+  assert.ok(a.rejected > 0, 'and counted, so a bad threshold is visible');
+});
+
+test('a sustained sound of the same loudness is kept', () => {
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => ((t % 20) < 3 ? -20 : -60));
+  assert.ok(a.events.length >= 2, 'real episodes still open');
+  assert.ok(a.events.every(e => (e.e - e.s) >= 0.4));
+});
+
+test('a sound that never becomes audible is dropped however prominent', () => {
+  // -70 dB is 20 dB above a -90 dB floor, so the relative rule alone would keep it — but
+  // nothing at -70 dBFS is audible on a phone speaker.
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => ((t % 20) < 3 ? -70 : -90));
+  assert.equal(a.events.length, 0);
+  assert.ok(a.rejected > 0);
+});
+
+test('a real snore clears both rules', () => {
+  const a = makeAnalyser();
+  run(a, 60 * 50, t => ((t % 20) < 4 ? -26 : -58));
+  assert.ok(a.events.length >= 2);
+  assert.ok(a.events.every(e => e.peak >= DEFAULTS.MIN_PEAK_DB));
+});

@@ -4,8 +4,16 @@
 
 export const DEFAULTS = {
   FRAME_MS:    20,    // analysis frame length
-  GATE_DB:     12,    // open the gate this far above the rolling noise floor
+  GATE_DB:     15,    // open the gate this far above the rolling noise floor
   OPEN_MS:     150,   // sustained above threshold before an event opens
+
+  // Two rules that exist because a night produced 102 events and most of them were
+  // nothing. A relative threshold alone is not enough: in a very quiet room the floor sits
+  // so low that a rustle clears it, and with pre/post roll a 150 ms tick becomes a
+  // four-second file that sounds like silence.
+  MIN_EVENT_MS: 400,  // the sound itself must last this long, roll excluded
+  MIN_PEAK_DB:  -52,  // ...and get at least this loud in absolute terms, not just
+                      // relative to the floor. Below this it is inaudible on playback.
   // Sustained below threshold before the gate closes. Generous on purpose: breathing and
   // snoring come in bursts with seconds of quiet between them, and a short hold chops one
   // episode into a string of unlistenable fragments. Anything quieter than this for less
@@ -53,6 +61,9 @@ export class NightAnalyser {
     this.env = [];        // per second: [meanDb, maxDb, p10Db]
     this.gaps = [];       // {at, ms, audioLostMs}
     this.events = [];     // {s, e, peak}
+    /// Gate openings discarded as too short or too quiet. Worth counting: a night that
+    /// rejects thousands means the threshold is wrong, not that the room was busy.
+    this.rejected = 0;
     this.audioSec = 0;
     this.wallMs = 0;
     this.msgCount = 0;
@@ -83,8 +94,10 @@ export class NightAnalyser {
   readPeak() { const p = this.peakSinceRead; this.peakSinceRead = -100; return p; }
 
   toJSON() {
-    const { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt } = this;
-    return { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt };
+    const { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt,
+            rejected } = this;
+    return { env, gaps, events, audioSec, wallMs, msgCount, sampleRate, t0, lastFrameAt,
+             rejected };
   }
 
   pushFrames(rmsList, totalSamples, now) {
@@ -161,7 +174,11 @@ export class NightAnalyser {
     if (g.belowN * C.FRAME_MS >= C.CLOSE_MS) {
       const s = g.startFrame * C.FRAME_MS / 1000;
       const e = (this._frame - g.belowN) * C.FRAME_MS / 1000;
-      if (this.events.length < C.MAX_EVENTS) {
+      const longEnough = (e - s) * 1000 >= C.MIN_EVENT_MS;
+      const loudEnough = g.peak >= C.MIN_PEAK_DB;
+      if (!longEnough || !loudEnough) {
+        this.rejected++;
+      } else if (this.events.length < C.MAX_EVENTS) {
         this.events.push({ s: +s.toFixed(1), e: +e.toFixed(1), peak: Math.round(g.peak) });
       }
       this._gate = { open: false, aboveN: 0, belowN: 0, startFrame: 0, peak: -100 };
