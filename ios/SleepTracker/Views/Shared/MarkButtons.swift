@@ -77,27 +77,6 @@ struct EventContextMenu: View {
         Button { onEditNote(event) } label: {
             Label(event.note == nil ? "Add note" : "Edit note", systemImage: "square.and.pencil")
         }
-        // Correcting by ear is the only reliable label there is, and every correction is
-        // one more example a model of your own could be trained on.
-        Menu {
-            ForEach(SoundKind.choices) { kind in
-                Button {
-                    store.setKind(sessionID: sessionID, eventIndex: event.index, kind: kind)
-                } label: {
-                    Label(kind.display, systemImage: kind.symbol)
-                }
-            }
-            if event.kindWasCorrected {
-                Divider()
-                Button(role: .destructive) {
-                    store.setKind(sessionID: sessionID, eventIndex: event.index, kind: nil)
-                } label: {
-                    Label("Clear correction", systemImage: "arrow.uturn.backward")
-                }
-            }
-        } label: {
-            Label("It's actually…", systemImage: "tag")
-        }
         ShareLink(item: SessionStore.shared.url(forEvent: event, in: sessionID)) {
             Label("Share clip", systemImage: "square.and.arrow.up")
         }

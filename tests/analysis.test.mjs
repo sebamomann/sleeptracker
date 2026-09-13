@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NightAnalyser, DEFAULTS, keptMs, pct, median, clampDb, summarise, findQuietGaps,
-  calibrate, nightStats, CALIBRATION,
+  calibrate, nightStats, CALIBRATION, sleepTimeline, SLEEP, ASLEEP, RESTLESS, AWAKE,
 } from '../public/analysis.js';
 import { buildSilentWav } from '../public/silent-audio.js';
 import { fadeEdges } from '../public/wav.js';
@@ -479,4 +479,72 @@ test('nightStats reduces a session to what calibration needs', () => {
   assert.equal(stats.hours, 8);
   assert.equal(stats.events, 3);
   assert.equal(stats.medianPeakDb, -30);
+});
+
+/* ── sleep, inferred ──────────────────────────────────────────────────────── */
+
+const HOURS_8 = 8 * 3_600_000;
+/** Events spread evenly through an epoch-aligned window. */
+function busy(fromMin, toMin, perEpoch = 8, kind = 'movement') {
+  const out = [];
+  for (let minute = fromMin; minute < toMin; minute += 5) {
+    for (let n = 0; n < perEpoch; n++) out.push({ s: minute * 60 + n, kind });
+  }
+  return out;
+}
+
+test('a quiet night is asleep almost all of it', () => {
+  const out = sleepTimeline({ events: [], wallMs: HOURS_8 });
+  assert.equal(out.onsetS, 0);
+  assert.ok(out.efficiency > 0.95);
+  assert.equal(out.awakenings, 0);
+});
+
+test('time spent settling is not counted as sleep', () => {
+  // Half an hour of reading and moving before it goes quiet.
+  const out = sleepTimeline({ events: busy(0, 30), wallMs: HOURS_8 });
+  assert.equal(out.onsetS, 30 * 60, `onset at ${out.onsetS}s, expected 1800`);
+  assert.equal(out.asleepSeconds, 7.5 * 3600, 'the half hour spent settling is excluded');
+});
+
+test('getting up at the end ends the night there', () => {
+  const out = sleepTimeline({ events: busy(450, 480), wallMs: HOURS_8 });
+  assert.equal(out.finalWakeS, 450 * 60);
+  assert.ok(out.inBedSeconds < HOURS_8 / 1000);
+});
+
+test('waking in the middle is counted, not ignored', () => {
+  const out = sleepTimeline({ events: busy(180, 200), wallMs: HOURS_8 });
+  assert.equal(out.awakenings, 1);
+  assert.ok(out.efficiency < 0.98);
+  assert.ok(out.efficiency > 0.8, 'one wake should not wreck the whole night');
+});
+
+test('talking means awake however little of it there was', () => {
+  // One sentence is not restlessness. People do not hold conversations asleep.
+  const quiet = sleepTimeline({ events: [{ s: 3600, kind: 'movement' }], wallMs: HOURS_8 });
+  const spoke = sleepTimeline({ events: [{ s: 3600, kind: 'talking' }], wallMs: HOURS_8 });
+  assert.equal(quiet.awakenings, 0);
+  assert.equal(spoke.awakenings, 1);
+});
+
+test('a brief stir is not getting up', () => {
+  // Five minutes of activity at the end, under WAKE_RUN_EPOCHS, so the night still
+  // ends at the recording's end rather than being cut short.
+  const out = sleepTimeline({ events: busy(475, 480), wallMs: HOURS_8 });
+  assert.equal(out.finalWakeS, 480 * 60);
+});
+
+test('a night that never settles reports no sleep rather than guessing', () => {
+  const out = sleepTimeline({ events: busy(0, 480), wallMs: HOURS_8 });
+  assert.equal(out.onsetS, null);
+  assert.equal(out.asleepSeconds, 0);
+  assert.equal(out.efficiency, 0);
+});
+
+test('an empty recording produces zeroes, not NaN', () => {
+  const out = sleepTimeline({ events: [], wallMs: 0 });
+  assert.deepEqual(out.epochs, []);
+  assert.equal(out.efficiency, 0);
+  assert.equal(out.asleepSeconds, 0);
 });

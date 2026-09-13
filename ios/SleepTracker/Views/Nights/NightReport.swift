@@ -48,6 +48,8 @@ struct NightReport: View {
                     onEditNote: edit
                 )
 
+                NightSleepSection(session: session).appearFade(2)
+
                 if session.byHour.count > 1 {
                     SectionHeader("When")
                     HourStrip(session: session)

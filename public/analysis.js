@@ -368,3 +368,129 @@ export function nightStats(session) {
     medianPeakDb: peaks.length ? median(peaks) : null,
   };
 }
+
+/* ── sleep, inferred ────────────────────────────────────────────────────────
+ * What sound can and cannot say.
+ *
+ * It CANNOT give sleep stages. REM, deep and light are defined by brain and eye
+ * activity — EEG and EOG — and a microphone has no access to either. Wearables
+ * approximate them from movement and heart-rate variability, and even those agree
+ * with a sleep lab only moderately. Anything here claiming "deep sleep" would be
+ * invention.
+ *
+ * It CAN do roughly what actigraphy does: tell moving from still. Sleep onset, the
+ * final wake, and restlessness in between are all reasonable from the pattern of
+ * when sounds happen. That is worth having, provided it is labelled as an estimate
+ * from sound rather than a measurement of sleep.
+ */
+
+export const SLEEP = {
+  EPOCH_S: 300,            // five-minute epochs, the usual actigraphy resolution
+  RESTLESS_EVENTS: 2,      // events in one epoch before it counts as restless
+  AWAKE_EVENTS: 5,         // ...and before it counts as awake
+  ONSET_QUIET_EPOCHS: 3,   // consecutive calm epochs before sleep is called (15 min)
+  WAKE_RUN_EPOCHS: 2,      // consecutive active epochs before waking is called
+};
+
+/** Epoch states, quietest first. */
+export const ASLEEP = 'asleep';
+export const RESTLESS = 'restless';
+export const AWAKE = 'awake';
+
+/**
+ * A night as five-minute epochs, plus the figures worth showing.
+ *
+ * `events` need `s` (seconds into the night) and optionally `kind`; talking is treated
+ * as evidence of being awake regardless of how much of it there was, because people
+ * do not hold conversations while asleep.
+ */
+export function sleepTimeline({ events = [], wallMs = 0 }, cfg = SLEEP) {
+  const total = Math.max(0, wallMs / 1000);
+  const count = Math.ceil(total / cfg.EPOCH_S);
+  if (!count) {
+    return { epochs: [], onsetS: null, finalWakeS: null, asleepSeconds: 0,
+             inBedSeconds: 0, efficiency: 0, awakenings: 0 };
+  }
+
+  const epochs = Array.from({ length: count }, (_, i) => ({
+    startS: i * cfg.EPOCH_S,
+    events: 0,
+    talking: false,
+    state: ASLEEP,
+  }));
+
+  for (const event of events) {
+    const index = Math.min(count - 1, Math.floor((event.s ?? 0) / cfg.EPOCH_S));
+    if (index < 0) continue;
+    epochs[index].events++;
+    if (event.kind === 'talking') epochs[index].talking = true;
+  }
+
+  for (const epoch of epochs) {
+    if (epoch.talking || epoch.events >= cfg.AWAKE_EVENTS) epoch.state = AWAKE;
+    else if (epoch.events >= cfg.RESTLESS_EVENTS) epoch.state = RESTLESS;
+  }
+
+  const onset = findOnset(epochs, cfg);
+  const finalWake = findFinalWake(epochs, cfg);
+
+  // Nothing settled, so there is no sleep period to report on.
+  if (onset === null || finalWake === null || finalWake <= onset) {
+    return { epochs, onsetS: null, finalWakeS: null, asleepSeconds: 0,
+             inBedSeconds: total, efficiency: 0, awakenings: 0 };
+  }
+
+  let asleepEpochs = 0;
+  let awakenings = 0;
+  let wasAwake = false;
+  for (let i = onset; i < finalWake; i++) {
+    const awake = epochs[i].state === AWAKE;
+    if (awake && !wasAwake) awakenings++;
+    if (!awake) asleepEpochs++;
+    wasAwake = awake;
+  }
+
+  const inBedSeconds = finalWake * cfg.EPOCH_S;
+  const asleepSeconds = asleepEpochs * cfg.EPOCH_S;
+  return {
+    epochs,
+    onsetS: onset * cfg.EPOCH_S,
+    finalWakeS: finalWake * cfg.EPOCH_S,
+    asleepSeconds,
+    inBedSeconds,
+    efficiency: inBedSeconds > 0 ? +(asleepSeconds / inBedSeconds).toFixed(3) : 0,
+    awakenings,
+  };
+}
+
+/** First epoch followed by a sustained calm run — settling, not a momentary lull. */
+function findOnset(epochs, cfg) {
+  for (let i = 0; i <= epochs.length - cfg.ONSET_QUIET_EPOCHS; i++) {
+    const settled = epochs
+      .slice(i, i + cfg.ONSET_QUIET_EPOCHS)
+      .every(e => e.state !== AWAKE);
+    if (settled) return i;
+  }
+  return null;
+}
+
+/**
+ * Just after the last epoch that was not awake.
+ *
+ * Deliberately the LAST one, not the last sustained activity: waking at 3am and sleeping
+ * four more hours is a wake in the middle of the night, not the end of it. An earlier
+ * version scanned back for any run of activity and so ended the night at 3am, discarding
+ * everything after.
+ */
+function findFinalWake(epochs, cfg) {
+  let lastAsleep = -1;
+  for (let i = epochs.length - 1; i >= 0; i--) {
+    if (epochs[i].state !== AWAKE) { lastAsleep = i; break; }
+  }
+  if (lastAsleep < 0) return null;
+
+  // Trailing activity only counts as having got up if it is sustained; one stirring epoch
+  // at the end is not morning.
+  const trailing = epochs.length - 1 - lastAsleep;
+  return trailing >= cfg.WAKE_RUN_EPOCHS ? lastAsleep + 1 : epochs.length;
+}

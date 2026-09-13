@@ -56,6 +56,13 @@ made only in Swift is untested by definition.
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
 own `DateFormatter` that had already drifted. Add to `Design/` instead.
 
+**Sound cannot give sleep stages, and must never claim to.** REM, deep and light are defined
+by brain and eye activity; a microphone has no access to either, and even wearables only
+approximate them. `SleepTimeline` does the actigraphy-shaped part — onset, final wake,
+restless versus still — and every figure it produces is labelled on screen as estimated from
+sound. Reading real stages would mean HealthKit, which needs the `healthkit` entitlement and
+so a paid account; background audio does not, which is why one is in and the other is not.
+
 **The thresholds are learned, not written down.** `Calibration` moves the gate toward
 whatever produces the target events per hour, and sets the absolute floor from the peaks the
 room actually produces — the part that genuinely cannot be guessed, since it is set by

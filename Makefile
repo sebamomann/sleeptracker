@@ -28,10 +28,14 @@ tools: ## Install the Swift toolchain, and warn if it drifts from CI
 project: ## Regenerate the Xcode project from ios/project.yml
 	cd ios && xcodegen generate
 
-# Regenerated only when the spec actually changes. `build: project` rebuilt it on every
-# single build, which threw away everything Xcode had resolved for the project — including
-# the provisioning it works out when a device connects.
-$(XCODE_PROJECT): ios/project.yml
+# Regenerated when the spec changes or a file is added or removed — a directory's mtime
+# moves on add/remove but not on edit, which is exactly the distinction wanted. Depending on
+# the .swift files themselves would regenerate on every keystroke, and `build: project`
+# regenerated unconditionally, throwing away everything Xcode had resolved for the project
+# including the provisioning it works out when a device connects.
+SWIFT_DIRS := $(shell find ios/SleepTracker -type d)
+
+$(XCODE_PROJECT): ios/project.yml $(SWIFT_DIRS)
 	cd ios && xcodegen generate
 
 lint: ## SwiftLint (strict) and SwiftFormat, check only

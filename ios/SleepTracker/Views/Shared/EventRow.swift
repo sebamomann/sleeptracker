@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One event, as it appears in a night's list, the highlight reel, and the favourites view.
+/// One event, as it appears in a night's list, the highlight reel, and favourites.
 ///
 /// The three differ only in whether the date is needed, so they share this rather than
 /// drifting apart — starring from one screen and not another would be worse than no
@@ -13,86 +13,39 @@ struct EventRow: View {
     @ObservedObject var store: NightsStore
     var onEditNote: (NightSession.EventRecord) -> Void
 
-    private var isPlaying: Bool {
-        player.playingIndex == event.index
-    }
+    private var isPlaying: Bool { player.playingIndex == event.index }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 10) {
-                Button {
-                    player.toggle(event, in: sessionID)
-                } label: {
+        VStack(alignment: .leading, spacing: Layout.tight) {
+            HStack(alignment: .top, spacing: Layout.loose) {
+                // The whole left side plays. Hunting for a 17-point circle is not a thing
+                // anyone should have to do to hear a four-second clip.
+                HStack(alignment: .top, spacing: Layout.loose) {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle")
                         .font(.title3)
                         .foregroundStyle(event.isFlagged ? Theme.gap : Theme.event)
                         .contentTransition(.symbolEffect(.replace))
                         .symbolEffect(.pulse, isActive: isPlaying)
+                    details
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .onTapGesture { player.toggle(event, in: sessionID) }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
-                        Text(showDate ? Fmt.dateTime.string(from: event.at)
-                            : Fmt.time.string(from: event.at))
-                            .font(.rowTitle)
-                            .foregroundStyle(Theme.textPrimary)
-                        Text(event.kind.display)
-                            .font(.rowLabel)
-                            .foregroundStyle(event.kind == .unclear
-                                ? Theme.textMuted : Theme.signal)
-                        if event.kindWasCorrected {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(Theme.event)
-                        } else if let label = event.topLabel, event.kind != .unclear {
-                            Text("\(Int(label.confidence * 100))% sure")
-                                .font(.rowMeta)
-                                .foregroundStyle(Theme.textMuted)
-                        }
-                    }
-
-                    if let transcript = event.transcript, !transcript.isEmpty {
-                        Text("“\(transcript)”")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Text(
-                        "\(String(format: "%.1f", event.durationS))s · peak \(Int(event.peakDb)) dB"
-                    )
-                    .font(.rowMeta)
-                    .foregroundStyle(Theme.textMuted)
-                }
-
-                Spacer(minLength: 4)
-
-                MarkButtons(event: event, sessionID: sessionID, store: store)
+                controls
             }
 
             // Notes only appear on marked events, which is why removing the last mark
             // removes the note too.
             if event.isMarked {
-                Button { onEditNote(event) } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: event.note == nil ? "square.and.pencil" : "text.bubble")
-                            .font(.fine)
-                        Text(event.note ?? "Add a note")
-                            .font(.fine)
-                            .italic(event.note == nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .foregroundStyle(event.note == nil ? Theme.textMuted : Theme.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 36)
+                noteRow
             }
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
+        .padding(.vertical, Layout.rowInsetV)
+        .padding(.horizontal, Layout.rowInsetH)
+        // A faint wash on whatever is playing, so the ear and the eye agree in a long list.
+        .background(isPlaying ? Theme.event.opacity(0.07) : Color.clear)
+        .motion(Motion.quick, value: isPlaying)
         .contextMenu {
             EventContextMenu(
                 event: event,
@@ -101,5 +54,105 @@ struct EventRow: View {
                 onEditNote: onEditNote
             )
         }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 7) {
+                Text(showDate ? Fmt.dateTime.string(from: event.at)
+                    : Fmt.time.string(from: event.at))
+                    .font(.rowTitle)
+                    .foregroundStyle(Theme.textPrimary)
+                if event.kindWasCorrected {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Theme.event)
+                } else if let label = event.topLabel, event.kind != .unclear {
+                    Text("\(Int(label.confidence * 100))% sure")
+                        .font(.rowMeta)
+                        .foregroundStyle(Theme.textMuted)
+                }
+            }
+
+            if let transcript = event.transcript, !transcript.isEmpty {
+                Text("“\(transcript)”")
+                    .font(.explain)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("\(String(format: "%.1f", event.durationS))s · peak \(Int(event.peakDb)) dB")
+                .font(.rowMeta)
+                .foregroundStyle(Theme.textMuted)
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 2) {
+            KindPicker(event: event, sessionID: sessionID, store: store)
+            MarkButtons(event: event, sessionID: sessionID, store: store)
+        }
+    }
+
+    private var noteRow: some View {
+        Button { onEditNote(event) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: event.note == nil ? "square.and.pencil" : "text.bubble")
+                    .font(.fine)
+                Text(event.note ?? "Add a note")
+                    .font(.fine)
+                    .italic(event.note == nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(event.note == nil ? Theme.textMuted : Theme.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 36)
+    }
+}
+
+/// The classifier's guess, and one tap to overrule it.
+///
+/// This was a long-press context menu, which is too slow for something done to most rows on
+/// a bad night. It reads as the current answer and behaves as a dropdown.
+struct KindPicker: View {
+    let event: NightSession.EventRecord
+    let sessionID: String
+    @ObservedObject var store: NightsStore
+
+    var body: some View {
+        Menu {
+            Section("It's actually") {
+                ForEach(SoundKind.choices) { kind in
+                    Button {
+                        store.setKind(sessionID: sessionID, eventIndex: event.index, kind: kind)
+                    } label: {
+                        Label(kind.display, systemImage: kind.symbol)
+                    }
+                }
+            }
+            if event.kindWasCorrected {
+                Button(role: .destructive) {
+                    store.setKind(sessionID: sessionID, eventIndex: event.index, kind: nil)
+                } label: {
+                    Label("Back to the guess", systemImage: "arrow.uturn.backward")
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(event.kind.display)
+                    .font(.rowLabel)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(event.kind == .unclear ? Theme.textMuted : Theme.signal)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Theme.surface2, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
