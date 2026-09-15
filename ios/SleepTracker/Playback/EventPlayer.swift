@@ -16,13 +16,6 @@ import SwiftUI
 final class EventPlayer: NSObject, ObservableObject {
     @Published private(set) var playingIndex: Int?
 
-    /// Where clips are lifted to. Short of 0 dBFS so a boosted peak has room and does not
-    /// clip on the way out.
-    private static let targetDB = -6.0
-    /// AVAudioUnitEQ tops out at +24 dB, and pushing a very quiet clip that far mostly
-    /// amplifies the room. Better a quiet clip than a wall of hiss.
-    private static let maxBoostDB = 24.0
-
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
     private let amplifier = AVAudioUnitEQ(numberOfBands: 0)
@@ -41,7 +34,7 @@ final class EventPlayer: NSObject, ObservableObject {
 
             let file = try AVAudioFile(forReading: url)
             wire(for: file.processingFormat)
-            amplifier.globalGain = Float(boost(forPeak: event.peakDb))
+            amplifier.globalGain = Float(AudioBoost.gainDB(forPeak: event.peakDb))
 
             if !engine.isRunning {
                 try engine.start()
@@ -69,12 +62,6 @@ final class EventPlayer: NSObject, ObservableObject {
         if engine.isRunning {
             engine.pause()
         }
-    }
-
-    /// dB of lift for a clip whose recorded peak was `peak`.
-    private func boost(forPeak peak: Double) -> Double {
-        guard peak > -100 else { return Self.maxBoostDB }
-        return min(Self.maxBoostDB, max(0, Self.targetDB - peak))
     }
 
     private func wire(for format: AVAudioFormat) {

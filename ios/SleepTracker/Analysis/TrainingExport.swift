@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Gathers your corrections into the folder layout Create ML wants.
@@ -11,6 +12,10 @@ import Foundation
 /// Only clips holding a single sound are exported. Create ML's sound classifier learns one
 /// class per clip, and a clip filed under farting, breathing and movement at once would teach
 /// it that all three sound the same. Mixed clips are counted, so it is clear what was left out.
+///
+/// Exported clips are amplified the same way in-app playback is — see `AudioBoost` — but as
+/// an actual re-encode rather than an EQ in the signal path: a clip dragged off the phone to
+/// a Mac has nothing standing between it and your ears the way `EventPlayer` does.
 ///
 /// Writes into the app's Documents directory, which `UIFileSharingEnabled` exposes, so the
 /// folder can be dragged off the phone in Finder.
@@ -52,7 +57,8 @@ enum TrainingExport {
                 let destination = classFolder
                     .appendingPathComponent("\(session.id)-\(event.index).m4a")
                 try? files.removeItem(at: destination)
-                try files.copyItem(at: source, to: destination)
+                guard (try? amplify(source, to: destination, peakDb: event.peakDb)) != nil
+                else { continue }
                 counts[kind, default: 0] += 1
             }
         }
@@ -63,6 +69,33 @@ enum TrainingExport {
         return Result(
             folder: folder, clips: counts.values.reduce(0, +), byKind: counts, mixed: mixed
         )
+    }
+
+    /// Decodes `source`, lifts it by `AudioBoost.gainDB(forPeak:)`, and re-encodes the
+    /// result to `destination`.
+    private static func amplify(_ source: URL, to destination: URL, peakDb: Double) throws {
+        let input = try AVAudioFile(forReading: source)
+        let format = input.processingFormat
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(input.length)
+        )
+        else { throw CocoaError(.fileReadCorruptFile) }
+        try input.read(into: buffer)
+        guard let channel = buffer.floatChannelData?[0] else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let gain = Float(pow(10, AudioBoost.gainDB(forPeak: peakDb) / 20))
+        let count = Int(buffer.frameLength)
+        var boosted = [Float](repeating: 0, count: count)
+        for i in 0 ..< count {
+            // Clamped rather than trusted: `peakDb` is measured at record time, and a
+            // decode that comes back even slightly hotter than that must not clip on export.
+            boosted[i] = max(-1, min(1, channel[i] * gain))
+        }
+
+        try EventWriter.encode(boosted, format: format, to: destination)
     }
 
     /// The class a corrected clip trains, or nil when it holds more than one sound.

@@ -37,24 +37,7 @@ struct EventWriter {
         )
         let url = SessionStore.shared.eventsDirectory(for: pending.nightID)
             .appendingPathComponent(file)
-
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: format.sampleRate,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: Self.bitRate
-        ]
-        let audioFile = try AVAudioFile(forWriting: url, settings: settings)
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: format,
-            frameCapacity: AVAudioFrameCount(faded.count)
-        )
-        else { throw CocoaError(.fileWriteUnknown) }
-        buffer.frameLength = AVAudioFrameCount(faded.count)
-        faded.withUnsafeBufferPointer { src in
-            buffer.floatChannelData![0].update(from: src.baseAddress!, count: faded.count)
-        }
-        try audioFile.write(from: buffer)
+        try Self.encode(faded, format: format, to: url)
 
         // Classified after the file exists: the classifier reads a URL rather than taking a
         // buffer, and this is not the audio thread, so it can take its time.
@@ -80,7 +63,29 @@ struct EventWriter {
         )
     }
 
-    /// Raised-cosine ramp at both edges, in place. Mirrors `fadeEdges` in `public/wav.js`.
+    /// Writes mono float samples as 32 kbps AAC. Shared with `TrainingExport`, which
+    /// decodes, amplifies and re-encodes a clip through the same path rather than its own.
+    static func encode(_ samples: [Float], format: AVAudioFormat, to url: URL) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: Self.bitRate
+        ]
+        let audioFile = try AVAudioFile(forWriting: url, settings: settings)
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(samples.count)
+        )
+        else { throw CocoaError(.fileWriteUnknown) }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { src in
+            buffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
+        }
+        try audioFile.write(from: buffer)
+    }
+
+    /// Raised-cosine ramp at both edges, in place.
     static func fadeEdges(_ s: inout [Float], rate: Double, ms: Double) {
         let n = min(Int(rate * ms / 1000), s.count / 2)
         guard n >= 1 else { return }
