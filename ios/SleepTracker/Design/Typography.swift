@@ -32,4 +32,13 @@ extension Font {
     static let explain = Font.system(size: 12.5)
     /// The smallest supporting text.
     static let fine = Font.system(size: 11)
+
+    /// A primary button's own label, or a verdict banner's headline — a short, prominent
+    /// line that is not a report's `headlineStat` figure and not a `rowTitle` in a list.
+    static let actionTitle = Font.system(size: 17, weight: .semibold)
+    /// The supporting sentence under an `actionTitle`, and a settings row's own label —
+    /// heavier than `explain`, since these sit alone rather than trailing something bigger.
+    static let actionDetail = Font.system(size: 15)
+    /// An empty-state heading: "No nights yet", "Nothing marked yet".
+    static let emptyStateTitle = Font.system(size: 15, weight: .medium)
 }
