@@ -67,7 +67,7 @@ struct FavouritesView: View {
             Text(kinds.isActive ? "Nothing marked matches"
                 : filter == .all ? "Nothing marked yet"
                 : "Nothing \(filter.rawValue.lowercased()) yet")
-                .font(.subheadline.weight(.medium))
+                .font(.emptyStateTitle)
             Text("Star anything worth keeping, flag anything worth worrying about. Both show "
                 + "up here, with whatever note you left on them.")
                 .font(.explain).foregroundStyle(Theme.textMuted)

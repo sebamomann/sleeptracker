@@ -35,8 +35,8 @@ struct Verdict: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.headline)
-            Text(detail).font(.subheadline).foregroundStyle(Theme.textSecondary)
+            Text(title).font(.actionTitle)
+            Text(detail).font(.actionDetail).foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Layout.gutter)

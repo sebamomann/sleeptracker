@@ -46,7 +46,7 @@ struct HighlightReel: View {
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(h.headline)
-                        .font(.callout.weight(.medium))
+                        .font(.rowTitle)
                         .foregroundStyle(Theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {

@@ -47,7 +47,10 @@ and those tests carry the reasons the rules exist — the 102-event night, the r
 mid-snore, the capture that died and read as healthy. A tuning change moves a test with it.
 The tests are hosted in the app (for `@testable import`), so anything they need must be
 reachable without a microphone, UserDefaults or the disk: keep that logic in pure functions
-like `Calibration.apply(to:)` and `EventRecord.toggleCorrected(_:)`.
+like `Calibration.apply(to:)` and `EventRecord.toggleCorrected(_:)`. Where state can't be
+made pure — `NightsStore`, `SessionStore` — take the dependency as an initialiser argument
+defaulting to the real singleton (`NightsStore(store: SessionStore = .shared)`), so a test
+can pass one rooted in a scratch directory instead.
 
 **UI tests run against fixture nights, never real ones.** `SLEEPTRACKER_UITEST=fresh|keep`
 in the launch environment makes `UITestFixtures` seed a separate folder and reset the app's

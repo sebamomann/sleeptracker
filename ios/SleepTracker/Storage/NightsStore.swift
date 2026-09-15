@@ -10,7 +10,13 @@ import Foundation
 final class NightsStore: ObservableObject {
     @Published private(set) var sessions: [NightSession] = []
 
-    private let store = SessionStore.shared
+    private let store: SessionStore
+
+    /// `store` is a seam for tests: pass one rooted in a scratch directory to exercise
+    /// mutation without touching a real night.
+    init(store: SessionStore = .shared) {
+        self.store = store
+    }
 
     func reload() {
         sessions = store.list()
@@ -95,6 +101,48 @@ final class NightsStore: ObservableObject {
                 )
             }
             session.events.removeAll { indices.contains($0.index) }
+        }
+    }
+
+    /// Re-runs the classifier on `events` and merges fresh labels back in.
+    ///
+    /// Shared by "Classify N unlabelled events" (nights recorded before classification
+    /// existed) and "Re-classify all" (a second opinion after the rules or the model
+    /// change) — the two were the same loop written twice. Classifying is slow enough that
+    /// it runs off the main actor; only the merge touches `sessions`.
+    ///
+    /// `refreshKnownLabels` says whether to overwrite the recorded vocabulary even if one
+    /// is already there — a full re-classify wants today's answer, while filling in gaps
+    /// only wants a vocabulary recorded if the night predates having one at all.
+    func reclassify(
+        sessionID: String,
+        events: [NightSession.EventRecord],
+        refreshKnownLabels: Bool = false
+    ) async {
+        // Copied to a local so the detached task captures a plain value, not `self` — this
+        // class isn't Sendable, and the task must not touch anything on the main actor.
+        let capturedStore = store
+        let labelled = await Task.detached(priority: .utility) { () -> [Int: [SoundLabel]] in
+            var fresh: [Int: [SoundLabel]] = [:]
+            for event in events {
+                let labels = EventClassifier.shared
+                    .classify(url: capturedStore.url(forEvent: event, in: sessionID))
+                if !labels.isEmpty {
+                    fresh[event.index] = labels
+                }
+            }
+            return fresh
+        }.value
+
+        update(id: sessionID) { session in
+            for (index, labels) in labelled {
+                if let i = session.events.firstIndex(where: { $0.index == index }) {
+                    session.events[i].labels = labels
+                }
+            }
+            if refreshKnownLabels || session.knownLabels == nil {
+                session.knownLabels = EventClassifier.shared.knownLabels
+            }
         }
     }
 

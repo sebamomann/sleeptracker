@@ -49,10 +49,28 @@ struct NightTidySection: View {
                 Button("Delete them", role: .destructive) { drop(empty) }
                 Button("Keep", role: .cancel) {}
             } message: {
-                Text("Anything starred, flagged, transcribed, or recognised as snoring, "
-                    + "speech or coughing is kept. This cannot be undone.")
+                Text(dropMessage(empty))
             }
         }
+    }
+
+    /// Why, tallied: "3 too quiet to hear · 2 unrecognised". `Relevance.reason` already
+    /// exists for exactly this, and was going unused — the dialog only named a count.
+    private func dropMessage(_ events: [NightSession.EventRecord]) -> String {
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for event in events {
+            let reason = Relevance.reason(event)
+            if counts[reason] == nil {
+                order.append(reason)
+            }
+            counts[reason, default: 0] += 1
+        }
+        let breakdown = order.map { "\(counts[$0] ?? 0) \($0)" }.joined(separator: " · ")
+
+        return (breakdown.isEmpty ? "" : "\(breakdown). ")
+            + "Anything starred, flagged, transcribed, or recognised as snoring, speech or "
+            + "coughing is kept. This cannot be undone."
     }
 
     private func summary(emptyCount: Int) -> String {
@@ -67,32 +85,11 @@ struct NightTidySection: View {
 
     private func reclassify() {
         working = "Re-classifying…"
-        let id = session.id
-        let events = session.events
-        let files = SessionStore.shared
-        let nights = store
-
-        Task.detached(priority: .utility) {
-            var fresh: [Int: [SoundLabel]] = [:]
-            for event in events {
-                let labels = EventClassifier.shared
-                    .classify(url: files.url(forEvent: event, in: id))
-                if !labels.isEmpty {
-                    fresh[event.index] = labels
-                }
-            }
-            let results = fresh
-            await MainActor.run {
-                nights.update(id: id) { session in
-                    for (index, labels) in results {
-                        if let position = session.events.firstIndex(where: { $0.index == index }) {
-                            session.events[position].labels = labels
-                        }
-                    }
-                    session.knownLabels = EventClassifier.shared.knownLabels
-                }
-                working = nil
-            }
+        Task {
+            await store.reclassify(
+                sessionID: session.id, events: session.events, refreshKnownLabels: true
+            )
+            working = nil
         }
     }
 

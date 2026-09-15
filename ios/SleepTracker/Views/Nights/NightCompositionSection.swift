@@ -69,35 +69,9 @@ struct NightCompositionSection: View {
     /// Label events recorded before classification existed, or missed at the time.
     private func classifyMissing(_ pending: [NightSession.EventRecord]) {
         classifying = true
-        let id = session.id
-        let files = SessionStore.shared
-        let nights = store
-
-        Task.detached(priority: .utility) {
-            var labelled: [Int: [SoundLabel]] = [:]
-            for event in pending {
-                let labels = EventClassifier.shared
-                    .classify(url: files.url(forEvent: event, in: id))
-                if !labels.isEmpty {
-                    labelled[event.index] = labels
-                }
-            }
-            // Frozen before crossing to the main actor: a var captured by a concurrently
-            // executing closure is a data race, and an error under Swift 6.
-            let results = labelled
-            await MainActor.run {
-                nights.update(id: id) { session in
-                    for (index, labels) in results {
-                        if let i = session.events.firstIndex(where: { $0.index == index }) {
-                            session.events[i].labels = labels
-                        }
-                    }
-                    if session.knownLabels == nil {
-                        session.knownLabels = EventClassifier.shared.knownLabels
-                    }
-                }
-                classifying = false
-            }
+        Task {
+            await store.reclassify(sessionID: session.id, events: pending)
+            classifying = false
         }
     }
 }

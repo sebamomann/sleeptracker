@@ -9,8 +9,6 @@ struct EnvelopeChart: View {
     @State private var cursor: Int?
     @State private var reveal = 0.0
 
-    private static let dbLow = -80.0
-    private static let dbHigh = 0.0
     private static let plotHeight = 190.0
     /// A phone-width chart has a few hundred pixels; a night has up to ~29k samples.
     private static let bucketTarget = 360
@@ -97,15 +95,14 @@ struct EnvelopeChart: View {
             let slice = env[lo ..< max(lo + 1, hi)]
             return EnvelopeSample(
                 mean: slice.map { $0[0] }.reduce(0, +) / Double(slice.count),
-                max: slice.map { $0[1] }.max() ?? Self.dbLow,
-                p10: slice.map { $0[2] }.min() ?? Self.dbLow
+                max: slice.map { $0[1] }.max() ?? EnvelopePlot.dbLow,
+                p10: slice.map { $0[2] }.min() ?? EnvelopePlot.dbLow
             )
         }
     }
 
     private var secondsPerBucket: Double {
-        guard !session.envelope.isEmpty, !buckets.isEmpty else { return 1 }
-        return Double(session.envelope.count) / Double(buckets.count)
+        EnvelopePlot.secondsPerBucket(session: session, bucketCount: buckets.count)
     }
 
     private func bucketIndex(atX x: Double) -> Int? {

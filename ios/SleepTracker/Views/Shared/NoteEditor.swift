@@ -25,12 +25,12 @@ struct NoteEditor: View {
                     .foregroundStyle(Theme.textMuted)
 
                 if let transcript = event.transcript, !transcript.isEmpty {
-                    Text("“\(transcript)”").font(.callout).foregroundStyle(Theme.textSecondary)
+                    Text("“\(transcript)”").font(.actionDetail).foregroundStyle(Theme.textSecondary)
                 }
 
                 TextField("What about this?", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.body)
+                    .font(.actionDetail)
                     .lineLimit(3 ... 8)
                     .padding(Layout.cardPadding)
                     .cardSurface()

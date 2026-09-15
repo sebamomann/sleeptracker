@@ -84,11 +84,6 @@ extension NightSession {
         events.filter { ($0.labels ?? []).isEmpty }
     }
 
-    /// Speech events still waiting on a transcript.
-    var untranscribedSpeech: [EventRecord] {
-        events.filter { $0.isSpeech && $0.transcript == nil }
-    }
-
     var notableEvents: [EventRecord] {
         events.filter(Highlights.isNotable)
     }

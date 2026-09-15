@@ -5,6 +5,11 @@ import SwiftUI
 /// Was a single 60-line `draw` with the geometry recomputed inline; splitting it means each
 /// mark can be read on its own, and the shared coordinate maths is stated once.
 struct EnvelopePlot {
+    /// The chart's dB axis: everything above `dbHigh` or below `dbLow` clamps to the edge.
+    /// Shared with `EnvelopeChart`, which reads the same bounds when scrubbing.
+    static let dbLow = -80.0
+    static let dbHigh = 0.0
+
     let session: NightSession
     let buckets: [EnvelopeSample]
     let cursor: Int?
@@ -13,14 +18,21 @@ struct EnvelopePlot {
     /// Room below the plot for the event rail.
     private var plotHeight: Double { size.height - 18 }
     private var railY: Double { plotHeight + 10 }
+
+    /// How many seconds of the night one bucket covers — the downsampling ratio between the
+    /// night's per-second envelope and however many buckets the chart actually drew.
+    static func secondsPerBucket(session: NightSession, bucketCount: Int) -> Double {
+        guard !session.envelope.isEmpty, bucketCount > 0 else { return 1 }
+        return Double(session.envelope.count) / Double(bucketCount)
+    }
+
     private var secondsPerBucket: Double {
-        guard !session.envelope.isEmpty, !buckets.isEmpty else { return 1 }
-        return Double(session.envelope.count) / Double(buckets.count)
+        Self.secondsPerBucket(session: session, bucketCount: buckets.count)
     }
 
     private func y(_ db: Double) -> Double {
-        let clamped = min(0.0, max(-80.0, db))
-        return (0.0 - clamped) / 80.0 * plotHeight
+        let clamped = min(Self.dbHigh, max(Self.dbLow, db))
+        return (Self.dbHigh - clamped) / (Self.dbHigh - Self.dbLow) * plotHeight
     }
 
     private func x(_ index: Int) -> Double {

@@ -24,6 +24,13 @@ final class AudioSessionPolicy {
     private var observers: [NSObjectProtocol] = []
 
     func activate() throws {
+        // Idempotent: a media-services reset mid-recording calls this again without an
+        // intervening `deactivate()`, and without clearing first each notification would
+        // fire once per stacked registration — every interruption and background span
+        // counted twice.
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+
         let session = AVAudioSession.sharedInstance()
 
         // .record rather than .playAndRecord: nothing here plays, and the narrower category

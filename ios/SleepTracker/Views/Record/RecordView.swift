@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// The screen that is on while you sleep: black, dim red, one large target.
@@ -62,7 +63,7 @@ struct RecordView: View {
             if let listensAt = recorder.listensAt {
                 Text("listening from \(Fmt.hourMinute.string(from: listensAt))")
                     .accessibilityIdentifier("listening-from")
-                    .font(.footnote.monospaced())
+                    .font(.rowMeta)
                     .foregroundStyle(Theme.nightInk.opacity(0.75))
 
                 Text("nothing is kept for \(max(0, listensAt.timeIntervalSince(now)).clock)")
@@ -71,7 +72,7 @@ struct RecordView: View {
                     .multilineTextAlignment(.center)
             } else if let s = recorder.session {
                 Text("recording \(now.timeIntervalSince(s.startedAt).clock)")
-                    .font(.footnote.monospaced())
+                    .font(.rowMeta)
                     .foregroundStyle(Theme.nightInk.opacity(0.75))
 
                 Text(status(s))
@@ -119,7 +120,7 @@ struct RecordView: View {
         }
         .frame(height: 6)
         .frame(maxWidth: 300)
-        .animation(.linear(duration: 0.12), value: recorder.levelDB)
+        .motion(Motion.meter, value: recorder.levelDB)
     }
 
     private var fraction: Double {
