@@ -76,3 +76,36 @@ targets:
         # for Team" — xcodebuild cannot reach the stored Apple ID session on its own. Use
         # CODE_SIGNING_ALLOWED=NO to type-check without signing.
         DEVELOPMENT_TEAM: H65648747K
+
+  # Hosted in the app so `@testable import SleepTracker` reaches internal types. Everything
+  # tested here is logic that runs without a microphone: the gate, calibration, the timeline,
+  # the classification vocabulary. `make test` runs it on the simulator.
+  SleepTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [SleepTrackerTests]
+    dependencies:
+      - target: SleepTracker
+    # See the comment on SleepTracker's own `attributes` above: without this, Xcode's
+    # Signing & Capabilities pane reads this target as unconfigured even though the build
+    # setting below is set, and re-resolves signing for the whole project on every open.
+    attributes:
+      ProvisioningStyle: Automatic
+      DevelopmentTeam: H65648747K
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: H65648747K
+
+schemes:
+  SleepTracker:
+    build:
+      targets:
+        SleepTracker: all
+        SleepTrackerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [SleepTrackerTests]

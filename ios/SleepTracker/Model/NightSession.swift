@@ -1,7 +1,6 @@
 import Foundation
 
 /// Everything worth knowing about one night, in a shape that survives the app being killed.
-/// Mirrors the browser spike's session JSON so the same reasoning applies to both.
 struct NightSession: Codable, Identifiable {
     struct Device: Codable {
         var model: String

@@ -1,6 +1,4 @@
 node_modules/
-certs/
-*.pem
 .DS_Store
 ios/build/
 ios/SleepTracker.xcodeproj/

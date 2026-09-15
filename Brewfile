@@ -1,7 +1,6 @@
 # The Swift toolchain this project expects. `make tools` installs it.
 #
-# These are native Swift binaries, not Node packages — npm was only ever the task runner,
-# and the Makefile is now the front door for both halves of the repo.
+# These are native Swift binaries, not Node packages. The Makefile is the front door.
 #
 # Homebrew does not pin versions in a Brewfile. The versions CI uses are recorded in the
 # Makefile (SWIFTLINT_VERSION) and `make tools` checks the local one matches, because the

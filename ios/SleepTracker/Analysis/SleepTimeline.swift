@@ -12,7 +12,7 @@ import Foundation
 /// having, as long as every figure is presented as an estimate from sound rather than a
 /// measurement of sleep.
 ///
-/// Mirrors `sleepTimeline()` in `public/analysis.js`, where the rules are pinned by tests.
+/// The rules are pinned by `SleepTimelineTests`.
 enum SleepTimeline {
     /// Five-minute epochs, the usual actigraphy resolution.
     static let epochSeconds = 300.0

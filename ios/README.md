@@ -4,9 +4,8 @@ The native recorder. iOS revokes the microphone the moment the screen locks for 
 content; a native app with `UIBackgroundModes: audio` keeps recording. That key is an
 Info.plist declaration, **not** a signed entitlement, so none of this needs a paid account.
 
-The gate is a direct port of `public/analysis.js` — same constants, same rolling floor,
-same hysteresis, same warmup rule, same edge fades. Keep the two in step when tuning; the
-JS side is the one with the test suite, so change and test there first.
+The gate, calibration, quiet gaps and sleep timeline are pinned by the suites in
+`SleepTrackerTests/` — run them with `make test`, and move a test with any tuning change.
 
 | Folder | What |
 |---|---|
@@ -110,9 +109,10 @@ SwiftLint also runs as an Xcode build phase, so violations show up inline on ⌘
 |---|---|---|
 | SwiftLint | complexity, file/type/function length, naming, smells | `.swiftlint.yml` |
 | SwiftFormat | formatting only | `.swiftformat` |
-| jscpd | copy-paste across Swift *and* the JS side | `.jscpd.json` |
+| jscpd | copy-paste across the app and its tests | `.jscpd.json` |
 
-All three run in CI and fail the build. Two things worth knowing if you touch the configs:
+All three run in CI and fail the build; the tests need Xcode, so they run in `make check`
+on the Mac only. Two things worth knowing if you touch the configs:
 
 - SwiftLint's thresholds are set **where the code already sits**, so a violation means
   something changed rather than that the bar was never met. That is what makes `--strict`
@@ -122,9 +122,9 @@ All three run in CI and fail the build. Two things worth knowing if you touch th
 - `modifierOrder` is disabled in SwiftFormat because SwiftLint wants the opposite order, and
   with both enabled each run undid the other. One tool per concern.
 
-`make tools` reads the `Brewfile`. jscpd is the one Node tool here — it is not Swift-native,
-but it is the lightest cross-language copy-paste detector that handles Swift at all, and it
-covers both halves of the repo in one pass. (PMD's CPD is the Java-based alternative.)
+`make tools` reads the `Brewfile`. jscpd is the one Node tool here, run through `npx` — it is
+not Swift-native, but it is the lightest copy-paste detector that handles Swift at all.
+(PMD's CPD is the Java-based alternative.)
 
 ## Audio format
 

@@ -1,12 +1,18 @@
-# The front door for both halves of the repo: a Swift app and a JS/Node web spike.
+# The front door: lint, test, duplication and build for the iOS app.
 #
-# Neither half's package manager belongs in charge of the other, so neither is. npm runs the
-# Node tests because that is its job; the Swift tools are Homebrew binaries invoked directly.
+# The Swift tools are Homebrew binaries invoked directly. jscpd is the one Node tool, run
+# through npx, because it is the lightest copy-paste detector that handles Swift at all.
 
 SWIFTLINT_VERSION := 0.65.1
 JSCPD_VERSION     := 4
 XCODE_PROJECT     := ios/SleepTracker.xcodeproj
 BUILD_LOG         := build/xcodebuild.log
+TEST_LOG          := build/xcodebuild-test.log
+
+# The first available iPhone simulator, by UDID. Looked up because Xcode updates rename the
+# devices; a UDID rather than a name because with two runtimes installed a bare name resolves
+# to the newest OS, which may not have a device of that name at all.
+SIMULATOR = $(shell xcrun simctl list devices available | grep -m1 iPhone | grep -oE '[0-9A-F-]{36}')
 
 .DEFAULT_GOAL := help
 .PHONY: help tools project lint fix test dupes build check clean
@@ -33,7 +39,7 @@ project: ## Regenerate the Xcode project from ios/project.yml
 # the .swift files themselves would regenerate on every keystroke, and `build: project`
 # regenerated unconditionally, throwing away everything Xcode had resolved for the project
 # including the provisioning it works out when a device connects.
-SWIFT_DIRS := $(shell find ios/SleepTracker -type d)
+SWIFT_DIRS := $(shell find ios/SleepTracker ios/SleepTrackerTests -type d)
 
 $(XCODE_PROJECT): ios/project.yml $(SWIFT_DIRS)
 	cd ios && xcodegen generate
@@ -46,10 +52,17 @@ fix: ## Autocorrect the mechanical half
 	swiftlint --fix --quiet
 	swiftformat .
 
-test: ## The analysis suite — the gate's rules live in public/analysis.js
-	npm test
+test: $(XCODE_PROJECT) ## Swift tests on the simulator — gate, calibration, timeline, vocabulary
+	@mkdir -p build
+	@test -n "$(SIMULATOR)" || { echo "no iPhone simulator — see AGENTS.md before downloading"; exit 1; }
+	@xcodebuild test -project $(XCODE_PROJECT) -scheme SleepTracker \
+		-destination 'platform=iOS Simulator,id=$(SIMULATOR)' \
+		-derivedDataPath build/xcode-test CODE_SIGNING_ALLOWED=NO \
+		-only-testing:SleepTrackerTests > $(TEST_LOG) 2>&1 \
+		|| { grep -E '✘|error:' $(TEST_LOG) | head -30; echo "see $(TEST_LOG)"; exit 1; }
+	@grep -E 'Test run with' $(TEST_LOG)
 
-dupes: ## Copy-paste detection, across Swift and JS in one pass
+dupes: ## Copy-paste detection across the app and its tests
 	npx --yes jscpd@$(JSCPD_VERSION) . --config .jscpd.json --reporters console
 
 build: $(XCODE_PROJECT) ## Compile the iOS target, unsigned

@@ -2,10 +2,9 @@ import Foundation
 
 /// Tracks whether capture actually kept running — the one thing this build exists to prove.
 ///
-/// Port of the gap detector in `public/analysis.js`. Liveness is derived from the audio
-/// tap's own sample counter, never from a timer: a suspended app's timers stop too, so a
-/// timer-based heartbeat cannot tell "we were frozen" from "we stopped being scheduled".
-/// Samples processed cannot be faked.
+/// Liveness is derived from the audio tap's own sample counter, never from a timer: a
+/// suspended app's timers stop too, so a timer-based heartbeat cannot tell "we were frozen"
+/// from "we stopped being scheduled". Samples processed cannot be faked.
 final class CaptureHealth {
     struct Gap: Codable, Hashable {
         let at: Double // epoch ms, start of the gap

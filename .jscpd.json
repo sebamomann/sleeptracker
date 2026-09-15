@@ -19,9 +19,6 @@
   "output": "reports/jscpd",
   "format": [
     "swift",
-    "javascript",
-    "html",
-    "css",
     "markdown",
     "yaml",
     "json"

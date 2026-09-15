@@ -2,7 +2,7 @@ import Foundation
 
 /// Near-silent stretches bracketed by sound — pauses in an ongoing episode.
 ///
-/// Port of `findQuietGaps` in `public/analysis.js`, where the rules are pinned by tests.
+/// The rules are pinned by `QuietGapsTests`.
 ///
 /// This is the inverse of the gate, and needs different rules: plain silence is
 /// uninformative, since most of a quiet night is silence. A run only qualifies when sound

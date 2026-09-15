@@ -3,27 +3,21 @@
 Records the sounds of a night, keeps only what isn't silence, labels it on-device, and shows
 a report in the morning.
 
-Two halves that share one algorithm:
-
-| Half | What it is |
-|---|---|
-| `ios/` | **The product.** A native iOS app — the only thing that can record a locked iPhone |
-| `public/`, `server.mjs` | The web survival spike that proved the browser *cannot*, deployed via Jenkins |
-| `recorder/` | A Node recorder for any always-on machine, sharing `public/analysis.js` verbatim |
+A native iOS app in `ios/` — the only thing that can record a locked iPhone. There is no
+server and nothing to deploy. A web version and a Node recorder existed first, to prove the
+browser cannot do this; they were removed once they had, and are in git history.
 
 ## Commands
 
-`make` is the front door for both halves; `make help` lists everything.
+`make` is the front door; `make help` lists everything.
 
 ```sh
 make check      # lint + test + dupes + build — run before finishing every task
+make test       # the Swift tests, on the first available iPhone simulator
 make fix        # autocorrect the mechanical half
 make project    # regenerate the Xcode project after adding/moving any Swift file
 make tools      # install the Swift toolchain, and warn if it drifts from CI
 ```
-
-`npm test` still runs the analysis suite directly; `package.json` covers the JS half only.
-Neither half's package manager is in charge of the other.
 
 SwiftLint also runs as an Xcode **build phase**, so violations appear as warnings beside the
 code on every ⌘B — non-strict there, strict in CI.
@@ -31,10 +25,8 @@ code on every ⌘B — non-strict there, strict in CI.
 ## Structure
 
 ```
-public/analysis.js        THE GATE — noise floor, hysteresis, gaps, quiet gaps. Tested.
-public/wav.js             WAV encoder + edge fades
-recorder/                 Node bedside recorder (arecord/sox/ffmpeg → the gate)
-tests/                    node:test suites for the above
+ios/SleepTrackerTests/    Swift Testing suites — gate, capture health, calibration, quiet
+                          gaps, timeline, classification vocabulary, the listening delay
 ios/SleepTracker/
   App/                    tab shell, entry point
   Design/                 colours, ONE spacing scale, semantic type roles, ALL date formats
@@ -47,10 +39,13 @@ ios/SleepTracker/
 
 ## Rules that are not obvious from the code
 
-**`public/analysis.js` is the source of truth for the gate.** It has the test suite; the
-Swift in `ios/SleepTracker/Audio/NoiseGate.swift` and `Analysis/QuietGaps.swift` are ports.
-Change and test there **first**, then port, and keep the constants in step. A tuning change
-made only in Swift is untested by definition.
+**The gate and the analysis are pinned by tests.** `NoiseGate`, `CaptureHealth`,
+`Calibration`, `QuietGaps` and `SleepTimeline` each have a suite in `ios/SleepTrackerTests`,
+and those tests carry the reasons the rules exist — the 102-event night, the recorder started
+mid-snore, the capture that died and read as healthy. A tuning change moves a test with it.
+The tests are hosted in the app (for `@testable import`), so anything they need must be
+reachable without a microphone, UserDefaults or the disk: keep that logic in pure functions
+like `Calibration.apply(to:)` and `EventRecord.toggleCorrected(_:)`.
 
 **Never use raw spacing, fonts or date formats in a view.** `Layout`, the semantic `Font`
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
@@ -68,15 +63,15 @@ whatever produces the target events per hour, and sets the absolute floor from t
 room actually produces — the part that genuinely cannot be guessed, since it is set by
 microphone gain and by how far the phone sleeps from the bed. It is proportional in octaves,
 capped at 2 dB a night so one noisy night cannot swing it, and bounded at both ends. Change
-the rules in `calibrate()` in `public/analysis.js`, where a test asserts it converges rather
-than oscillates, then port. Each night records the values it ran with, so an old night can
-be read against its own settings.
+the rules in `Calibration.apply(to:)`, where a test asserts it converges rather than
+oscillates. Each night records the values it ran with, so an old night can be read against
+its own settings.
 
 **An event has to clear three rules, not one.** Prominence above the rolling floor was the
 only test, and one real night produced 102 events of which most were rustles and room tone:
 in a quiet room the floor sits so low that anything clears it, and pre/post roll turns a
-150 ms tick into a four-second file that sounds like silence. `MIN_EVENT_MS` and
-`MIN_PEAK_DB` are the other two, and rejections are counted into the session so a wrong
+150 ms tick into a four-second file that sounds like silence. `minEventMS` and
+`minPeakDB` in `GateConfig` are the other two, and rejections are counted into the session so a wrong
 threshold is visible rather than silent. `Relevance` is the after-the-fact version for
 nights recorded before a rule changed; it never touches anything marked, transcribed, or
 recognised as snoring, speech or coughing.
@@ -153,8 +148,10 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 - `xcodebuild` will not resolve an iOS destination unless the iOS platform is installed
   (`xcodebuild -downloadPlatform iOS`, ~8.5 GB). Do not delete simulator runtimes to tidy
   up — doing so removed both and cost the download twice.
-- The web half deploys on push to `main`: branch-scoped Docker resources, immutable
-  `sleeptracker:<branch>-<build>` tag, health-checked rollout with rollback, port `34257`.
+- A simulator runtime (iOS 26.5) is installed, which is all `make test` needs. It picks
+  the first available iPhone rather than a named one, because Xcode updates rename them.
+- Jenkins runs lint and duplication only, in Docker on Linux. It cannot run the tests —
+  those need Xcode — so `make check` on the Mac is the only place they run.
 
 ## Tooling traps
 
@@ -163,7 +160,7 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
   install drifts. This was `swiftlint:latest` in CI, which meant an upstream release could
   fail a build containing no change of ours.
 - **jscpd does not scan Swift by default.** `format` in `.jscpd.json` must list `swift`
-  explicitly, or all 43 files are skipped while the report still reads `0 clones`.
+  explicitly, or every Swift file is skipped while the report still reads `0 clones`.
 - **SwiftFormat's `modifierOrder` is disabled** because SwiftLint wants the opposite order
   and each run undid the other. One tool per concern.
 - SwiftLint thresholds are set **where the code already sits**, so a violation means
@@ -184,8 +181,8 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 
 ## Definition of done
 
-1. Gate or analysis change? `public/analysis.js` + a test first, then port to Swift.
-2. Added or moved a Swift file? `make project`.
+1. Gate, analysis or model change? A test in `ios/SleepTrackerTests` with it.
+2. Added or moved a Swift file (tests included)? `make project`.
 3. `make check` — 0 violations, 0 clones, all tests passing, unsigned build succeeds.
 4. Say plainly what was **not** verified. On-device behaviour, classifier accuracy on real
    bedroom audio, and anything needing signing cannot be checked from a terminal.

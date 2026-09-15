@@ -9,8 +9,8 @@ import Foundation
 ///
 /// So each finished night feeds a small controller: the gate moves toward whatever produces
 /// the target number of events per hour, and the absolute floor follows the peaks this room
-/// actually produces. Mirrors `calibrate()` in `public/analysis.js`, where the rules are
-/// pinned by tests — including that it converges rather than oscillates.
+/// actually produces. The rules are pinned by `CalibrationTests` — including that it
+/// converges rather than oscillates.
 enum Calibration {
     /// Nights of history to judge by: long enough to smooth one noisy night, short enough to
     /// follow a phone moved to the other side of the bed.
@@ -82,18 +82,25 @@ enum Calibration {
 
     static func learn(from session: NightSession) {
         var next = state
-        let peaks = session.events.map(\.peakDb).sorted()
-        next.history.insert(NightStat(
-            hours: session.wall / 3600,
-            events: session.events.count,
-            medianPeakDb: peaks.isEmpty ? nil : peaks[peaks.count / 2]
-        ), at: 0)
+        next.history.insert(stat(of: session), at: 0)
         next.history = Array(next.history.prefix(14))
         apply(to: &next)
         state = next
     }
 
-    private static func apply(to next: inout State) {
+    /// A night reduced to what calibration needs.
+    static func stat(of session: NightSession) -> NightStat {
+        let peaks = session.events.map(\.peakDb).sorted()
+        return NightStat(
+            hours: session.wall / 3600,
+            events: session.events.count,
+            medianPeakDb: peaks.isEmpty ? nil : peaks[peaks.count / 2]
+        )
+    }
+
+    /// Move the thresholds toward the history in `next`. Pure, so it can be tested without
+    /// touching the stored state.
+    static func apply(to next: inout State) {
         let usable = next.history.filter { $0.hours >= minHours }.prefix(window)
         guard !usable.isEmpty else {
             next.nights = 0

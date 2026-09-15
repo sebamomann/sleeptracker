@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The gate only closes a close-hold after a sound ends, and events want pre-roll — so by
 /// the time an event is known, its opening is already in the past. This keeps enough
-/// history to cut it back out. Mirrors `recorder/ring.mjs`.
+/// history to cut it back out.
 final class SampleRing {
     private var storage: [Float]
     private let capacity: Int
