@@ -22,7 +22,11 @@ struct StatTile: View {
                 Text(note).font(.fine).foregroundStyle(Theme.textMuted).lineLimit(2)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // maxHeight as well as maxWidth: a `note` that wraps to two lines was leaving that
+        // tile taller than its row-mates, each with its own short card border rather than
+        // a shared one — LazyVGrid sizes the row to the tallest cell, but a cell has to ask
+        // to fill it, or its own background stops at its own content.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(Layout.cardPadding)
         .cardSurface()
     }
