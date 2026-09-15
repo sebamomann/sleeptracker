@@ -42,7 +42,11 @@ targets:
       # should not stop you building while you work. CI runs it strictly and does stop.
       - name: SwiftLint
         basedOnDependencyAnalysis: false
+        # Xcode runs build scripts with a minimal PATH that leaves out Homebrew — on Apple
+        # Silicon it lives in /opt/homebrew — so a swiftlint the terminal finds is invisible
+        # here without this line.
         script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
           cd "$PROJECT_DIR/.."
           if command -v swiftlint > /dev/null; then
             swiftlint lint --quiet
