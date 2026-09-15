@@ -86,11 +86,31 @@ struct NoiseGateTests {
     // MARK: - What is not an event
 
     @Test func aBriefTickIsDroppedAndCounted() {
-        // 200 ms: the shape that made most of a real night's 102 events.
+        // 200 ms: the shape that made most of a real night's 102 events. -40 dB clears the
+        // open threshold without being loud enough to count as the "obviously not a tick"
+        // exception below — see `aVeryLoudBriefSoundIsKeptDespiteBeingShort`.
         let harness = GateHarness()
-        harness.run(seconds: 60) { $0.truncatingRemainder(dividingBy: 10) < 0.2 ? -20 : -60 }
+        harness.run(seconds: 60) { $0.truncatingRemainder(dividingBy: 10) < 0.2 ? -40 : -60 }
         #expect(harness.events.isEmpty)
         #expect(harness.gate.rejected > 0, "counted, so a bad threshold is visible")
+    }
+
+    @Test func aVeryLoudBriefSoundIsKeptDespiteBeingShort() {
+        // A fart, a single cough, a knock: genuinely brief, but sharp enough that duration
+        // alone would wrongly call it a meaningless tick. 150 ms, well over the config's
+        // `veryLoudMarginDB` above the floor.
+        let harness = GateHarness()
+        harness.run(seconds: 60) { $0.truncatingRemainder(dividingBy: 10) < 0.15 ? -25 : -60 }
+        #expect(!harness.events.isEmpty, "loud enough to be kept whatever its duration")
+        #expect(harness.events.allSatisfy { $0.peakDB >= -32 })
+    }
+
+    @Test func loudButNotVeryLoudStillNeedsTheUsualDuration() {
+        // Between the two floors: audible, but not the "obviously not a tick" exception —
+        // ordinary short-tick rejection still applies.
+        let harness = GateHarness()
+        harness.run(seconds: 60) { $0.truncatingRemainder(dividingBy: 10) < 0.2 ? -40 : -60 }
+        #expect(harness.events.isEmpty)
     }
 
     @Test func aSustainedSoundOfTheSameLoudnessIsKept() {

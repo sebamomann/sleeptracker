@@ -1,8 +1,7 @@
 import Foundation
 
-/// Port of `public/analysis.js`. The constants, the rolling noise floor and the hysteresis
-/// are identical to the browser spike's, which is covered by the Node test suite — keep the
-/// two in step when tuning.
+/// The rolling noise floor, the hysteresis and the rules for what is worth a file. Pinned by
+/// `NoiseGateTests`; a tuning change should move a test with it.
 struct GateConfig {
     var frameMS = 20.0
     var gateDB = 15.0 // open this far above the rolling floor
@@ -17,9 +16,16 @@ struct GateConfig {
     /// Two rules that exist because a real night produced 102 events and most were nothing.
     /// A relative threshold alone is not enough: in a very quiet room the floor sits so low
     /// that a rustle clears it, and with roll a 150 ms tick becomes a four-second file that
-    /// sounds like silence. Mirrors MIN_EVENT_MS / MIN_PEAK_DB in public/analysis.js.
+    /// sounds like silence.
     var minEventMS = 400.0 // the sound itself must last this long, roll excluded
     var minPeakDB = -52.0 // ...and be audible in absolute terms, not merely prominent
+    /// A sound this far above `minPeakDB` is kept whatever its duration. Duration alone
+    /// cannot tell a meaningless tick from a genuine sound that is simply brief — a fart, a
+    /// single cough, a knock — and those are exactly the kind of sharp, loud, short sound
+    /// this app exists to catch. The margin is well above the ~12 dB a typical kept event
+    /// already clears (see `Calibration.peakMarginDB`), so this only fires for something
+    /// distinctly louder than an ordinary night, not for every event that clears the floor.
+    var veryLoudMarginDB = 20.0
 
     var preRollS = 4.0 // kept before the gate opened — events would start mid-snore
     /// Kept after it closed. May exceed `closeMS`: AnalysisPipeline defers the cut until
@@ -159,7 +165,9 @@ final class NoiseGate {
         let endFrame = frameIndex - belowFrames
         let soundMS = Double(endFrame - startFrame) * cfg.frameMS
 
-        if soundMS >= cfg.minEventMS, eventPeak >= cfg.minPeakDB {
+        let longAndAudible = soundMS >= cfg.minEventMS && eventPeak >= cfg.minPeakDB
+        let veryLoud = eventPeak >= cfg.minPeakDB + cfg.veryLoudMarginDB
+        if longAndAudible || veryLoud {
             let start = Int((Double(startFrame) * cfg.frameMS / 1000 - cfg.preRollS) * sampleRate)
             let end = Int((Double(endFrame) * cfg.frameMS / 1000 + cfg.postRollS) * sampleRate)
             onEvent?(GateEvent(startSample: max(0, start), endSample: end, peakDB: eventPeak))

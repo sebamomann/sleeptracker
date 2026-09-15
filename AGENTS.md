@@ -80,12 +80,17 @@ the rules in `Calibration.apply(to:)`, where a test asserts it converges rather 
 oscillates. Each night records the values it ran with, so an old night can be read against
 its own settings.
 
-**An event has to clear three rules, not one.** Prominence above the rolling floor was the
-only test, and one real night produced 102 events of which most were rustles and room tone:
-in a quiet room the floor sits so low that anything clears it, and pre/post roll turns a
-150 ms tick into a four-second file that sounds like silence. `minEventMS` and
-`minPeakDB` in `GateConfig` are the other two, and rejections are counted into the session so a wrong
-threshold is visible rather than silent. `Relevance` is the after-the-fact version for
+**An event has to clear three rules, not one — with one exception for the unmistakably
+loud.** Prominence above the rolling floor was the only test, and one real night produced
+102 events of which most were rustles and room tone: in a quiet room the floor sits so low
+that anything clears it, and pre/post roll turns a 150 ms tick into a four-second file that
+sounds like silence. `minEventMS` and `minPeakDB` in `GateConfig` are the other two. But
+duration alone cannot tell a meaningless tick from a sound that is genuinely brief — a fart,
+a single cough, a knock — so a sound `veryLoudMarginDB` above `minPeakDB` is kept whatever
+its duration; the margin sits well above what an ordinary kept event clears, so it only
+fires for something distinctly louder than a normal night. Rejections are counted into the
+session so a wrong threshold is visible rather than silent. `Relevance` is the after-the-fact
+version for
 nights recorded before a rule changed; it never touches anything marked, transcribed, or
 recognised as snoring, speech or coughing.
 
