@@ -59,7 +59,17 @@ struct RecordView: View {
 
             meter
 
-            if let s = recorder.session {
+            if let listensAt = recorder.listensAt {
+                Text("listening from \(Fmt.hourMinute.string(from: listensAt))")
+                    .accessibilityIdentifier("listening-from")
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(Theme.nightInk.opacity(0.75))
+
+                Text("nothing is kept for \(max(0, listensAt.timeIntervalSince(now)).clock)")
+                    .font(.rowMeta)
+                    .foregroundStyle(Theme.nightInk.opacity(0.5))
+                    .multilineTextAlignment(.center)
+            } else if let s = recorder.session {
                 Text("recording \(now.timeIntervalSince(s.startedAt).clock)")
                     .font(.footnote.monospaced())
                     .foregroundStyle(Theme.nightInk.opacity(0.75))

@@ -155,7 +155,8 @@ extension NightSession {
         for mark in marks {
             let at = Date(timeIntervalSince1970: mark.at / 1000)
             if mark.what.hasPrefix("backgrounded") {
-                enteredAt = at
+                // Locked during `ListeningDelay`, before the night began: it counts from t0.
+                enteredAt = max(at, startedAt)
             }
             if mark.what.hasPrefix("foregrounded"), let from = enteredAt {
                 spans.append((from, at))

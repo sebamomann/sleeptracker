@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Runs a night: starts capture, feeds the gate, writes what the gate catches, and records
 /// enough about its own behaviour to show whether capture survived the screen locking.
@@ -21,6 +20,9 @@ final class NightRecorder: ObservableObject {
     @Published private(set) var levelDB = -100.0
     @Published private(set) var floorDB = -60.0
     @Published private(set) var lastError: String?
+    /// When the night begins to be kept, while `ListeningDelay` is still running. Capture is
+    /// already on; nothing before this is written.
+    @Published private(set) var listensAt: Date?
 
     private let saveEvery: TimeInterval = 15
 
@@ -28,7 +30,9 @@ final class NightRecorder: ObservableObject {
     private let policy = AudioSessionPolicy()
     private let store = SessionStore.shared
     private var saveTimer: Timer?
-    private var lifecycleObservers: [NSObjectProtocol] = []
+    /// Logged during the wait, before a night exists. Without "backgrounded" from then, the
+    /// report would say the phone never left the foreground.
+    private var waitLog: [NightSession.Mark] = []
 
     private let pipeline: AnalysisPipeline
     /// Encoding, classifying and writing take long enough that they cannot share a queue
@@ -65,25 +69,35 @@ final class NightRecorder: ObservableObject {
 
     // MARK: - Control
 
+    /// Capture starts now; the night starts after `ListeningDelay`, or now if there is none.
     func start() {
         guard !isRecording else { return }
         lastError = nil
+        session = nil
+        waitLog = []
 
-        let now = Date()
-        let id = Fmt.sessionID.string(from: now)
-        session = NightSession.beginning(id: id, at: now)
-        let settings = Calibration.config()
-        session?.gateDbUsed = settings.gateDB
-        session?.minPeakDbUsed = settings.minPeakDB
-        mark("gate \(Int(settings.gateDB)) dB over floor, ignoring under "
-            + "\(Int(settings.minPeakDB)) dBFS")
-        pipeline.begin(nightID: id, at: now)
+        let delay = ListeningDelay.seconds
+        if delay > 0 {
+            // Checked when the hold ends: a wait outliving a stop must not begin a night.
+            let target = Date().addingTimeInterval(delay)
+            listensAt = target
+            pipeline.hold(seconds: delay) { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, listensAt == target else { return }
+                    listensAt = nil
+                    do { try beginNight(delay: delay) } catch { fail(error) }
+                }
+            }
+        }
 
         do {
-            try store.prepare(id: id)
+            // Either way the pipeline is set up before capture starts, so not one sample
+            // reaches last night's gate.
+            if delay == 0 {
+                try beginNight(delay: 0)
+            }
             try policy.activate()
-            try mark("input " + (engine.start()))
-            observeAppLifecycle()
+            try mark("input " + engine.start())
             isRecording = true
             saveTimer = Timer
                 .scheduledTimer(withTimeInterval: saveEvery, repeats: true) { [weak self] _ in
@@ -92,20 +106,37 @@ final class NightRecorder: ObservableObject {
             StartReminder.reschedule(skippingTonight: true) // tonight is covered
             persist()
         } catch {
-            lastError = String(describing: error)
-            mark("start failed: \(error)")
-            stop()
+            fail(error)
         }
+    }
+
+    /// Create the night's session and start keeping what the gate catches.
+    private func beginNight(delay: TimeInterval) throws {
+        let now = Date()
+        let id = Fmt.sessionID.string(from: now)
+        session = NightSession.beginning(
+            id: id, at: now, settings: Calibration.config(), delay: delay, earlier: waitLog
+        )
+        pipeline.begin(nightID: id, at: now)
+        try store.prepare(id: id)
+        persist()
+    }
+
+    private func fail(_ error: Error) {
+        lastError = String(describing: error)
+        mark("start failed: \(error)")
+        stop()
     }
 
     func stop() {
         engine.stop()
+        // Stopped during the wait: there is no night, and nothing to save.
+        pipeline.cancelHold()
+        listensAt = nil
         // Anything still waiting on its tail is cut now with whatever was recorded: a
         // slightly short last event beats losing it.
         pipeline.flush()
         saveTimer?.invalidate(); saveTimer = nil
-        lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
-        lifecycleObservers.removeAll()
         isRecording = false
 
         mark("stopped")
@@ -157,31 +188,16 @@ final class NightRecorder: ObservableObject {
 
         case .routeChanged:
             mark("route changed")
+
+        case .backgrounded, .foregrounded:
+            mark(event == .backgrounded ? "backgrounded" : "foregrounded")
+            persist()
         }
     }
 
     private func restartEngine(reason: String) {
         do { try mark("engine restarted \(reason): " + (engine.start())) } catch {
             mark("engine restart failed \(reason): \(error)")
-        }
-    }
-
-    private func observeAppLifecycle() {
-        let nc = NotificationCenter.default
-        for (name, label) in [(UIApplication.didEnterBackgroundNotification, "backgrounded"),
-                              (UIApplication.willEnterForegroundNotification, "foregrounded")] {
-            lifecycleObservers.append(nc.addObserver(
-                forName: name,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    // "backgrounded" is the moment that mattered on the web: capture died
-                    // there. Here it is the evidence that it does not.
-                    self?.mark(label)
-                    self?.persist()
-                }
-            })
         }
     }
 
@@ -228,7 +244,9 @@ final class NightRecorder: ObservableObject {
     // MARK: - Persistence
 
     private func mark(_ what: String) {
-        session?.marks.append(.init(at: Date().timeIntervalSince1970 * 1000, what: what))
+        let entry = NightSession.Mark(at: Date().timeIntervalSince1970 * 1000, what: what)
+        guard session != nil else { return waitLog.append(entry) }
+        session?.marks.append(entry)
     }
 
     private func persist() {

@@ -170,3 +170,72 @@ struct SampleRingTests {
         #expect(ring.oldest == 0)
     }
 }
+
+/// The listening delay: capture runs, nothing is kept, and last night's gate never sees it.
+struct AnalysisPipelineHoldTests {
+    private final class Counter {
+        var value = 0
+    }
+
+    private let rate = 1000.0
+
+    /// Blocks until everything pushed so far has been consumed.
+    private func drain(_ pipeline: AnalysisPipeline) {
+        var session = makeSession()
+        pipeline.snapshot(into: &session)
+    }
+
+    private func level(_ db: Double, seconds: Double) -> [Float] {
+        [Float](repeating: Float(pow(10, db / 20)), count: Int(seconds * rate))
+    }
+
+    @Test func holdEndsOnceEnoughAudioHasBeenCaptured() {
+        let pipeline = AnalysisPipeline(sampleRate: rate, ringSeconds: 30)
+        let ended = Counter()
+        pipeline.hold(seconds: 1) { ended.value += 1 }
+
+        pipeline.push(level(-60, seconds: 0.6))
+        drain(pipeline)
+        #expect(ended.value == 0)
+
+        pipeline.push(level(-60, seconds: 0.6))
+        drain(pipeline)
+        #expect(ended.value == 1)
+
+        pipeline.push(level(-60, seconds: 2))
+        drain(pipeline)
+        #expect(ended.value == 1, "fires once")
+    }
+
+    @Test func aCancelledHoldNeverEnds() {
+        let pipeline = AnalysisPipeline(sampleRate: rate, ringSeconds: 30)
+        let ended = Counter()
+        pipeline.hold(seconds: 1) { ended.value += 1 }
+        pipeline.cancelHold()
+        pipeline.push(level(-60, seconds: 2))
+        drain(pipeline)
+        #expect(ended.value == 0)
+    }
+
+    @Test func nothingDuringTheHoldReachesLastNightsGate() {
+        // A loud sound and enough quiet after it to close the gate and record the tail.
+        let sound = level(-20, seconds: 3) + level(-60, seconds: 12)
+
+        let control = AnalysisPipeline(sampleRate: rate, ringSeconds: 30)
+        let controlEvents = Counter()
+        control.onEvent = { _ in controlEvents.value += 1 }
+        control.begin(nightID: "last", at: nightStart)
+        control.push(sound)
+        drain(control)
+        #expect(controlEvents.value == 1, "the same audio is an event without a hold")
+
+        let held = AnalysisPipeline(sampleRate: rate, ringSeconds: 30)
+        let heldEvents = Counter()
+        held.onEvent = { _ in heldEvents.value += 1 }
+        held.begin(nightID: "last", at: nightStart)
+        held.hold(seconds: 60) {}
+        held.push(sound)
+        drain(held)
+        #expect(heldEvents.value == 0)
+    }
+}

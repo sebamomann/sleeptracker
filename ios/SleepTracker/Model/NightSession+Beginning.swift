@@ -8,7 +8,16 @@ extension NightSession {
     /// A fresh night, with everything about the device and its capabilities recorded up
     /// front. "Nothing was transcribed" is not a useful thing to discover in the morning
     /// without knowing why, so unavailability is written into the log at the start.
-    static func beginning(id: String, at now: Date) -> NightSession {
+    ///
+    /// `delay` is how long capture already ran before this night began to be kept, and
+    /// `earlier` what was logged in that time — the input, and whether the phone was locked.
+    static func beginning(
+        id: String,
+        at now: Date,
+        settings: GateConfig,
+        delay: TimeInterval,
+        earlier: [Mark]
+    ) -> NightSession {
         var session = NightSession(
             id: id,
             t0: now.timeIntervalSince1970 * 1000,
@@ -22,7 +31,22 @@ extension NightSession {
             sampleRate: CaptureEngine.sampleRate
         )
 
+        session.marks = earlier
         session.marks.append(.init(at: session.t0, what: "started"))
+
+        session.gateDbUsed = settings.gateDB
+        session.minPeakDbUsed = settings.minPeakDB
+        session.marks.append(.init(
+            at: session.t0,
+            what: "gate \(Int(settings.gateDB)) dB over floor, ignoring under "
+                + "\(Int(settings.minPeakDB)) dBFS"
+        ))
+        if delay > 0 {
+            session.listeningDelayS = delay
+            session.marks.append(.init(
+                at: session.t0, what: "listening after \(Int(delay / 60)) min of capture"
+            ))
+        }
 
         let classifier = EventClassifier.shared
         session.knownLabels = classifier.knownLabels

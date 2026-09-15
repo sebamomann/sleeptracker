@@ -120,6 +120,9 @@ struct NightSession: Codable, Identifiable {
     /// the settings that produced it rather than against today's.
     var gateDbUsed: Double?
     var minPeakDbUsed: Double?
+    /// How long capture ran before this night began to be kept, from `ListeningDelay`. The
+    /// night itself — `t0`, every offset, the timeline — starts after it.
+    var listeningDelayS: Double?
     /// Wall clock of the most recent audio callback. The only record of when capture
     /// stopped, if it stopped and never resumed.
     var lastFrameAtMs: Double?

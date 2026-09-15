@@ -33,6 +33,9 @@ final class AnalysisPipeline {
     private var nightStart = Date()
     /// Events whose tail has not been recorded yet. See `harvest`.
     private var awaitingTail: [GateEvent] = []
+    /// Samples still to discard before `onHoldEnded` fires. See `hold`.
+    private var holdRemaining = 0
+    private var onHoldEnded: (() -> Void)?
 
     init(sampleRate: Double, ringSeconds: Int, gateConfig: GateConfig = GateConfig()) {
         self.sampleRate = sampleRate
@@ -53,6 +56,29 @@ final class AnalysisPipeline {
             let newGate = NoiseGate(sampleRate: sampleRate, config: gateConfig)
             newGate.onEvent = { [weak self] event in self?.harvest(event) }
             gate = newGate
+        }
+    }
+
+    /// Discard audio until `seconds` of it have been captured, then call `done` on the
+    /// pipeline's queue. Counted in samples, not by a timer: capture that stalls stalls the
+    /// wait with it, so the delay is always a delay in listening.
+    ///
+    /// The previous night's gate and ring go first — otherwise the samples between the hold
+    /// ending and `begin` would be cut into events filed under the old night.
+    func hold(seconds: TimeInterval, then done: @escaping () -> Void) {
+        queue.sync {
+            gate = nil
+            ring = nil
+            awaitingTail = []
+            holdRemaining = Int(seconds * sampleRate)
+            onHoldEnded = done
+        }
+    }
+
+    func cancelHold() {
+        queue.sync {
+            holdRemaining = 0
+            onHoldEnded = nil
         }
     }
 
@@ -79,6 +105,14 @@ final class AnalysisPipeline {
     // MARK: - On `queue`
 
     private func consume(_ samples: [Float]) {
+        if let done = onHoldEnded {
+            holdRemaining -= samples.count
+            if holdRemaining <= 0 {
+                onHoldEnded = nil
+                done()
+            }
+            return
+        }
         guard let gate, let ring else { return }
         samples.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return }

@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 
 /// The audio session, and the things the system does to it during an eight-hour recording.
 ///
@@ -12,6 +13,10 @@ final class AudioSessionPolicy {
         case interruptionEnded
         case mediaServicesReset // the audio stack restarted underneath us
         case routeChanged
+        /// "backgrounded" is the moment that mattered on the web: capture died there. Here it
+        /// is the evidence that it does not.
+        case backgrounded
+        case foregrounded
     }
 
     var onSystemEvent: ((SystemEvent) -> Void)?
@@ -55,6 +60,13 @@ final class AudioSessionPolicy {
 
         observe(AVAudioSession.routeChangeNotification, on: nil) { [weak self] _ in
             self?.onSystemEvent?(.routeChanged)
+        }
+
+        observe(UIApplication.didEnterBackgroundNotification, on: nil) { [weak self] _ in
+            self?.onSystemEvent?(.backgrounded)
+        }
+        observe(UIApplication.willEnterForegroundNotification, on: nil) { [weak self] _ in
+            self?.onSystemEvent?(.foregrounded)
         }
     }
 
