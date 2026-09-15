@@ -57,12 +57,13 @@ struct NightReport: View {
 
                 NightConcerningSection(session: session, player: player)
                 NightCompositionSection(session: session, store: store)
-                NightCaptureSection(
+                NightEventsSection(
                     session: session,
                     player: player,
                     store: store,
                     onEditNote: edit
                 )
+                NightCaptureSection(session: session)
             }
             .padding(Layout.gutter)
         }
