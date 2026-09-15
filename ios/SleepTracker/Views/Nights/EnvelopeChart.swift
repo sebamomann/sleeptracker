@@ -46,6 +46,8 @@ struct EnvelopeChart: View {
             if let index = cursor, let bucket = buckets[safe: index] {
                 Text(timeLabel(forBucket: index)).font(.rowMeta).bold()
                 Text("peak \(Int(bucket.max)) dB").font(.rowMeta).foregroundStyle(Theme.signal)
+                Text("ambient \(Int(bucket.mean)) dB").font(.rowMeta)
+                    .foregroundStyle(Theme.spectrumViolet)
                 Text("floor \(Int(bucket.p10)) dB").font(.rowMeta)
                     .foregroundStyle(Theme.textMuted)
             } else {
@@ -61,6 +63,7 @@ struct EnvelopeChart: View {
     private var legend: some View {
         HStack(spacing: Layout.cardPadding) {
             swatch(Theme.signal, "peak")
+            swatch(Theme.spectrumViolet, "ambient")
             swatch(Theme.textMuted, "floor")
             swatch(Theme.event, "events")
             if !session.realGaps.isEmpty {

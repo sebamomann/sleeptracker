@@ -45,6 +45,7 @@ struct EnvelopePlot {
         drawGrid(context)
         drawDeadTime(context) // under the signal: it is absence, not a mark
         drawSignal(context)
+        drawAmbient(context)
         drawFloor(context)
         drawThreshold(context)
         drawEventRail(context)
@@ -99,6 +100,13 @@ struct EnvelopePlot {
             startPoint: .zero, endPoint: CGPoint(x: 0, y: plotHeight)
         ))
         context.stroke(line(\.max), with: .color(Theme.signal), lineWidth: 1)
+    }
+
+    /// The average level per bucket — several seconds' worth once downsampled, unlike the
+    /// peak line, which is that same span's loudest single second. Peaks say what happened;
+    /// this says what the room generally sounded like around it.
+    private func drawAmbient(_ context: GraphicsContext) {
+        context.stroke(line(\.mean), with: .color(Theme.spectrumViolet), lineWidth: 1.5)
     }
 
     private func drawFloor(_ context: GraphicsContext) {
