@@ -26,7 +26,9 @@ enum Relevance {
 
     /// Sounds the app exists to catch. Kept even when the classifier is hesitant, because a
     /// missed snore costs more than a kept rustle.
-    static let alwaysKeep = ["snor", "speech", "cough", "breath", "gasp", "chok", "sneez"]
+    static let alwaysKeep = [
+        "snor", "speech", "cough", "breath", "gasp", "chok", "sneez", "sniff"
+    ]
 
     static func looksLikeNothing(_ event: NightSession.EventRecord) -> Bool {
         // Never discard something deliberately kept, or something with words in it.

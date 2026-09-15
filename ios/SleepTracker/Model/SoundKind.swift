@@ -15,7 +15,10 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
     case talking
     case breathing
     case coughing
+    case sniffing
+    case farting
     case movement
+    case awake
     case outside
     case nothing
     case unclear
@@ -28,7 +31,10 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         case .talking: "Talking"
         case .breathing: "Breathing"
         case .coughing: "Coughing"
+        case .sniffing: "Sniffing"
+        case .farting: "Farting"
         case .movement: "Movement"
+        case .awake: "Awake"
         case .outside: "Outside"
         case .nothing: "Nothing"
         case .unclear: "Unclear"
@@ -41,7 +47,10 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         case .talking: "text.bubble"
         case .breathing: "wind"
         case .coughing: "exclamationmark.bubble"
+        case .sniffing: "allergens"
+        case .farting: "cloud"
         case .movement: "bed.double"
+        case .awake: "eye"
         case .outside: "building.2"
         case .nothing: "circle.dotted"
         case .unclear: "questionmark.circle"
@@ -54,11 +63,20 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         allCases.filter { $0 != .unclear }
     }
 
+    /// Kinds that mean someone was up, which `SleepTimeline` counts as awake. `awake` itself
+    /// — up, checking the phone — is one only you can say: no classifier hears being awake,
+    /// so nothing in `mapping` leads to it.
+    var meansAwake: Bool {
+        self == .talking || self == .awake
+    }
+
     /// Substrings of Apple's identifiers, checked in order. First match wins, so the
     /// specific cases sit above the general ones.
     private static let mapping: [(SoundKind, [String])] = [
         (.snoring, ["snor", "snort"]),
         (.coughing, ["cough", "sneez", "throat", "gag", "chok", "hiccup"]),
+        (.sniffing, ["sniff"]),
+        (.farting, ["fart"]),
         (.talking, ["speech", "conversation", "shout", "whisper", "narrat", "yell",
                     "singing", "laugh", "babbl"]),
         (.breathing, ["breath", "wheez", "gasp", "sigh", "pant"]),
@@ -82,18 +100,60 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
 }
 
 extension NightSession.EventRecord {
-    /// What this event is, in the app's own vocabulary.
+    /// Everything this event holds, in the order it was heard.
     ///
-    /// Your correction wins outright. Otherwise the classifier's best label is translated,
-    /// and only if it is confident enough to be worth repeating — below that, `unclear`,
-    /// which is at least true.
-    var kind: SoundKind {
-        if let userKind, let corrected = SoundKind(rawValue: userKind) {
+    /// A clip is often more than one thing — a fart, then heavy breathing, then rolling
+    /// over. Your correction wins outright. Otherwise the classifier's best label is
+    /// translated, and only if it is confident enough to be worth repeating — below that,
+    /// `unclear`, which is at least true.
+    var kinds: [SoundKind] {
+        let corrected = correctedKinds
+        if !corrected.isEmpty {
             return corrected
         }
-        guard let top = topLabel, top.confidence >= 0.35 else { return .unclear }
-        return SoundKind.from(identifier: top.identifier) ?? .unclear
+        guard let top = topLabel, top.confidence >= 0.35 else { return [.unclear] }
+        return [SoundKind.from(identifier: top.identifier) ?? .unclear]
     }
 
-    var kindWasCorrected: Bool { userKind != nil }
+    /// The first of `kinds`, for places with room for one word.
+    var kind: SoundKind {
+        kinds.first ?? .unclear
+    }
+
+    /// What you said it was. Nights corrected before a clip could hold several sounds
+    /// carry a single `userKind`, which reads as a list of one.
+    var correctedKinds: [SoundKind] {
+        (userKinds ?? userKind.map { [$0] } ?? []).compactMap(SoundKind.init(rawValue:))
+    }
+
+    var kindWasCorrected: Bool { !correctedKinds.isEmpty }
+
+    /// Add or remove one sound from the correction. Added to the end, so picking them in the
+    /// order they were heard keeps that order.
+    mutating func toggleCorrected(_ kind: SoundKind) {
+        var kinds = correctedKinds
+        if let i = kinds.firstIndex(of: kind) {
+            kinds.remove(at: i)
+        } else {
+            kinds.append(kind)
+        }
+        setCorrected(kinds)
+    }
+
+    /// Always writes `userKinds`, and clears the legacy `userKind` it has absorbed.
+    mutating func setCorrected(_ kinds: [SoundKind]) {
+        userKinds = kinds.isEmpty ? nil : kinds.map(\.rawValue)
+        userKind = nil
+    }
+
+    func has(_ kind: SoundKind) -> Bool {
+        kinds.contains(kind)
+    }
+
+    /// "Farting, breathing, movement"
+    var kindsDisplay: String {
+        let words = kinds.map(\.display)
+        guard let first = words.first else { return SoundKind.unclear.display }
+        return ([first] + words.dropFirst().map { $0.lowercased() }).joined(separator: ", ")
+    }
 }

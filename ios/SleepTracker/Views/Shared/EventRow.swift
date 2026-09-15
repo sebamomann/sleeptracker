@@ -115,7 +115,9 @@ struct EventRow: View {
 /// The classifier's guess, and one tap to overrule it.
 ///
 /// This was a long-press context menu, which is too slow for something done to most rows on
-/// a bad night. It reads as the current answer and behaves as a dropdown.
+/// a bad night. It reads as the current answer and behaves as a dropdown. Several can be
+/// ticked, because one clip is often a fart, then heavy breathing, then rolling over — so
+/// the menu stays open between ticks, and the order they are ticked in is kept.
 struct KindPicker: View {
     let event: NightSession.EventRecord
     let sessionID: String
@@ -123,18 +125,16 @@ struct KindPicker: View {
 
     var body: some View {
         Menu {
-            Section("It's actually") {
+            Section("It's actually — tick all you hear") {
                 ForEach(SoundKind.choices) { kind in
-                    Button {
-                        store.setKind(sessionID: sessionID, eventIndex: event.index, kind: kind)
-                    } label: {
+                    Toggle(isOn: ticked(kind)) {
                         Label(kind.display, systemImage: kind.symbol)
                     }
                 }
             }
             if event.kindWasCorrected {
                 Button(role: .destructive) {
-                    store.setKind(sessionID: sessionID, eventIndex: event.index, kind: nil)
+                    store.clearKinds(sessionID: sessionID, eventIndex: event.index)
                 } label: {
                     Label("Back to the guess", systemImage: "arrow.uturn.backward")
                 }
@@ -144,6 +144,10 @@ struct KindPicker: View {
                 Text(event.kind.display)
                     .font(.rowLabel)
                     .lineLimit(1)
+                if event.kinds.count > 1 {
+                    Text("+\(event.kinds.count - 1)")
+                        .font(.rowMeta)
+                }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
             }
@@ -153,6 +157,18 @@ struct KindPicker: View {
             .background(Theme.surface2, in: Capsule())
             .contentShape(Capsule())
         }
+        .menuActionDismissBehavior(.disabled)
         .buttonStyle(.plain)
+        .accessibilityLabel(event.kindsDisplay)
+        .accessibilityIdentifier("kind-picker-\(event.index)")
+    }
+
+    private func ticked(_ kind: SoundKind) -> Binding<Bool> {
+        Binding(
+            get: { event.correctedKinds.contains(kind) },
+            set: { _ in
+                store.toggleKind(sessionID: sessionID, eventIndex: event.index, kind: kind)
+            }
+        )
     }
 }

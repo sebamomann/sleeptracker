@@ -8,6 +8,7 @@ struct FavouritesView: View {
     @ObservedObject var store: NightsStore
     @StateObject private var player = EventPlayer()
     @State private var filter: NightsStore.MarkFilter = .all
+    @State private var kinds = KindFilter()
     @State private var editing: PendingNote?
 
     private struct PendingNote: Identifiable {
@@ -21,9 +22,13 @@ struct FavouritesView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                let groups = store.markedByNight(filter)
+                let marked = store.markedByNight(filter)
+                let groups = marked
+                    .map { (night: $0.night, events: $0.events.filter(kinds.matches)) }
+                    .filter { !$0.events.isEmpty }
                 VStack(alignment: .leading, spacing: 14) {
                     picker
+                    KindFilterMenu(filter: $kinds, events: marked.flatMap(\.events))
                     if groups.isEmpty {
                         empty
                     } else {
@@ -34,6 +39,7 @@ struct FavouritesView: View {
                 }
                 .padding(Layout.gutter)
                 .motion(Motion.standard, value: filter)
+                .motion(Motion.standard, value: kinds)
                 .motion(Motion.standard, value: store.markedCount)
             }
             .spectrogramGround()
@@ -58,7 +64,8 @@ struct FavouritesView: View {
 
     private var empty: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(filter == .all ? "Nothing marked yet"
+            Text(kinds.isActive ? "Nothing marked matches"
+                : filter == .all ? "Nothing marked yet"
                 : "Nothing \(filter.rawValue.lowercased()) yet")
                 .font(.subheadline.weight(.medium))
             Text("Star anything worth keeping, flag anything worth worrying about. Both show "

@@ -20,6 +20,8 @@ struct MarkButtons: View {
             ) {
                 store.toggleStar(sessionID: sessionID, eventIndex: event.index)
             }
+            .accessibilityLabel(event.isStarred ? "Remove star" : "Star")
+            .accessibilityIdentifier("star-\(event.index)")
             button(
                 filled: "flag.fill",
                 empty: "flag",
@@ -28,6 +30,8 @@ struct MarkButtons: View {
             ) {
                 store.toggleFlag(sessionID: sessionID, eventIndex: event.index)
             }
+            .accessibilityLabel(event.isFlagged ? "Remove flag" : "Flag")
+            .accessibilityIdentifier("flag-\(event.index)")
         }
     }
 

@@ -40,12 +40,15 @@ final class NightsStore: ObservableObject {
         }
     }
 
-    /// Record what an event actually was. Overrides the classifier, and becomes training
-    /// data for a model that would not need overriding.
-    func setKind(sessionID: String, eventIndex: Int, kind: SoundKind?) {
-        mutateEvent(sessionID, eventIndex) { event in
-            event.userKind = kind?.rawValue
-        }
+    /// Add or remove one sound from what an event actually was. Overrides the classifier,
+    /// and becomes training data for a model that would not need overriding.
+    func toggleKind(sessionID: String, eventIndex: Int, kind: SoundKind) {
+        mutateEvent(sessionID, eventIndex) { $0.toggleCorrected(kind) }
+    }
+
+    /// Back to the classifier's guess.
+    func clearKinds(sessionID: String, eventIndex: Int) {
+        mutateEvent(sessionID, eventIndex) { $0.setCorrected([]) }
     }
 
     func setNote(sessionID: String, eventIndex: Int, note: String?) {

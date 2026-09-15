@@ -13,11 +13,14 @@ struct TrainingCard: View {
 
     var body: some View {
         let taught = store.sessions.flatMap(\.taughtEvents)
-        let byKind = Dictionary(grouping: taught) { $0.userKind ?? "" }
+        // Only single-sound clips train a classifier; see `TrainingExport`.
+        let single = taught.filter { $0.correctedKinds.count == 1 }
+        let mixed = taught.count - single.count
+        let byKind = Dictionary(grouping: single) { $0.kind }
 
         VStack(alignment: .leading, spacing: Layout.loose) {
             Text(taught.isEmpty
-                ? "Long-press any event and pick “It's actually…” to correct it. Each "
+                ? "Tap the sound's name on any event to correct it. Each "
                 + "correction is a labelled example — enough of them and a model trained "
                 + "on your own nights can replace the general one."
                 : "\(taught.count) clip\(taught.count == 1 ? "" : "s") corrected by ear.")
@@ -27,9 +30,17 @@ struct TrainingCard: View {
 
             if !byKind.isEmpty {
                 FlowTags(tags: SoundKind.choices.compactMap { kind in
-                    let count = byKind[kind.rawValue]?.count ?? 0
+                    let count = byKind[kind]?.count ?? 0
                     return count > 0 ? "\(kind.display) \(count)" : nil
                 })
+            }
+
+            if mixed > 0 {
+                Text("\(mixed) hold\(mixed == 1 ? "s" : "") more than one sound and won't be "
+                    + "exported — a classifier learns one sound per clip.")
+                    .font(.fine)
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let exported {
@@ -42,8 +53,8 @@ struct TrainingCard: View {
                 Text(failure).font(.fine).foregroundStyle(Theme.gap)
             }
 
-            if !taught.isEmpty {
-                Button("Export \(taught.count) for training") { export() }
+            if !single.isEmpty {
+                Button("Export \(single.count) for training") { export() }
                     .font(.rowLabel)
             }
         }

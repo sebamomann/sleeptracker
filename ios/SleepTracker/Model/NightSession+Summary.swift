@@ -60,17 +60,20 @@ extension NightSession {
         events.reduce(0) { $0 + $1.durationS }
     }
 
-    /// What the night was made of, by the classifier's best label, longest first.
+    /// What the night was made of, by kind of sound, longest first. A clip holding several
+    /// sounds counts towards each, so the bars say how often each happened rather than
+    /// adding up to the night.
     var byLabel: [LabelTally] {
         var tallies: [String: LabelTally] = [:]
         for event in events {
-            let kind = event.kind
-            var tally = tallies[kind.rawValue] ?? LabelTally(
-                label: kind.rawValue, display: kind.display, count: 0, seconds: 0
-            )
-            tally.count += 1
-            tally.seconds += event.durationS
-            tallies[kind.rawValue] = tally
+            for kind in event.kinds {
+                var tally = tallies[kind.rawValue] ?? LabelTally(
+                    label: kind.rawValue, display: kind.display, count: 0, seconds: 0
+                )
+                tally.count += 1
+                tally.seconds += event.durationS
+                tallies[kind.rawValue] = tally
+            }
         }
         return tallies.values.sorted { lhs, rhs in
             lhs.seconds == rhs.seconds ? lhs.label < rhs.label : lhs.seconds > rhs.seconds
@@ -100,7 +103,7 @@ extension NightSession {
 
     /// Events corrected by ear — the labelled set a model of your own would train on.
     var taughtEvents: [EventRecord] {
-        events.filter { $0.userKind != nil }
+        events.filter(\.kindWasCorrected)
     }
 
     var markedEvents: [EventRecord] {
@@ -109,7 +112,7 @@ extension NightSession {
 
     /// Total time spent on anything the classifier called snoring.
     var snoringSeconds: Double {
-        events.filter { $0.kind == .snoring }.reduce(0) { $0 + $1.durationS }
+        events.filter { $0.has(.snoring) }.reduce(0) { $0 + $1.durationS }
     }
 
     /// The night in hour-sized pieces — answers "when was it bad", which a flat event list

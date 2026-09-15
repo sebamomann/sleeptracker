@@ -87,8 +87,9 @@ enum SleepTimeline {
             let index = min(count - 1, Int(event.startS / epochSeconds))
             guard index >= 0 else { continue }
             epochs[index].events += 1
-            // One sentence is not restlessness — people do not hold conversations asleep.
-            if event.kind == .talking {
+            // One sentence is not restlessness — people do not hold conversations asleep. Nor
+            // is a sound you marked as being up.
+            if event.kinds.contains(where: \.meansAwake) {
                 talking[index] = true
             }
         }

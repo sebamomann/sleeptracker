@@ -1,15 +1,13 @@
 import SwiftUI
 
 /// Whether the recorder itself behaved: the verdict, the background-capture evidence, the
-/// counters, the full event list and the diagnostics log.
+/// counters and the diagnostics log. The full event list lives in `NightEventsSection`,
+/// where it can be filtered.
 ///
 /// Collapsed by default and placed last. While the approach was unproven this was the whole
 /// report; now it is what you open when something looks wrong.
 struct NightCaptureSection: View {
     let session: NightSession
-    @ObservedObject var player: EventPlayer
-    @ObservedObject var store: NightsStore
-    var onEditNote: (NightSession.EventRecord) -> Void
 
     @State private var expanded = false
 
@@ -34,7 +32,13 @@ struct NightCaptureSection: View {
                 SectionHeader("Loudness")
                 EnvelopeChart(session: session)
             }
-            eventList
+            if session.events.isEmpty {
+                Text("Nothing crossed the gate. Either the room was quiet, or capture never "
+                    + "ran — the dead-time tile above says which.")
+                    .font(.explain).foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .card()
+            }
             NightDiagnosticsSection(session: session)
         }
         .transition(.opacity)
@@ -158,26 +162,6 @@ struct NightCaptureSection: View {
                     tint: Theme.gap
                 )
             }
-        }
-    }
-
-    @ViewBuilder
-    private var eventList: some View {
-        SectionHeader("All events (\(session.events.count))")
-        if session.events.isEmpty {
-            Text("Nothing crossed the gate. Either the room was quiet, or capture never ran "
-                + "— the dead-time tile above says which.")
-                .font(.explain).foregroundStyle(Theme.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .card()
-        } else {
-            EventList(
-                events: session.events,
-                sessionID: session.id,
-                player: player,
-                store: store,
-                onEditNote: onEditNote
-            )
         }
     }
 

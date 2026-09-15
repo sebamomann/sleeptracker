@@ -164,7 +164,7 @@ private struct Builder {
             take(
                 Highlight(
                     event: event,
-                    reason: .notable(event.kind.display),
+                    reason: .notable(event.kindsDisplay),
                     id: "notable-\(event.index)"
                 ),
                 event: event,
@@ -215,7 +215,7 @@ private struct Builder {
             take(
                 Highlight(
                     event: best,
-                    reason: .representative(best.kind.display),
+                    reason: .representative(best.kindsDisplay),
                     id: "rep-\(best.index)"
                 ),
                 event: best,
