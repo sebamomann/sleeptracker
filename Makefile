@@ -8,6 +8,7 @@ JSCPD_VERSION     := 4
 XCODE_PROJECT     := ios/SleepTracker.xcodeproj
 BUILD_LOG         := build/xcodebuild.log
 TEST_LOG          := build/xcodebuild-test.log
+UITEST_LOG        := build/xcodebuild-uitest.log
 
 # The first available iPhone simulator, by UDID. Looked up because Xcode updates rename the
 # devices; a UDID rather than a name because with two runtimes installed a bare name resolves
@@ -15,7 +16,7 @@ TEST_LOG          := build/xcodebuild-test.log
 SIMULATOR = $(shell xcrun simctl list devices available | grep -m1 iPhone | grep -oE '[0-9A-F-]{36}')
 
 .DEFAULT_GOAL := help
-.PHONY: help tools project lint fix test dupes build check clean
+.PHONY: help tools project lint fix test uitest dupes build check clean
 
 help: ## Show this list
 	@grep -hE '^[a-z][a-z-]*:.*##' $(MAKEFILE_LIST) \
@@ -39,7 +40,7 @@ project: ## Regenerate the Xcode project from ios/project.yml
 # the .swift files themselves would regenerate on every keystroke, and `build: project`
 # regenerated unconditionally, throwing away everything Xcode had resolved for the project
 # including the provisioning it works out when a device connects.
-SWIFT_DIRS := $(shell find ios/SleepTracker ios/SleepTrackerTests -type d)
+SWIFT_DIRS := $(shell find ios/SleepTracker ios/SleepTrackerTests ios/SleepTrackerUITests -type d)
 
 $(XCODE_PROJECT): ios/project.yml $(SWIFT_DIRS)
 	cd ios && xcodegen generate
@@ -61,6 +62,18 @@ test: $(XCODE_PROJECT) ## Swift tests on the simulator — gate, calibration, ti
 		-only-testing:SleepTrackerTests > $(TEST_LOG) 2>&1 \
 		|| { grep -E '✘|error:' $(TEST_LOG) | head -30; echo "see $(TEST_LOG)"; exit 1; }
 	@grep -E 'Test run with' $(TEST_LOG)
+
+# Separate from `check`: each test relaunches the app, so the suite takes a few minutes where
+# the unit tests take seconds. Run it after touching a screen.
+uitest: $(XCODE_PROJECT) ## End-to-end UI tests in the simulator, against fixture nights (minutes)
+	@mkdir -p build
+	@test -n "$(SIMULATOR)" || { echo "no iPhone simulator — see AGENTS.md before downloading"; exit 1; }
+	@xcodebuild test -project $(XCODE_PROJECT) -scheme SleepTracker \
+		-destination 'platform=iOS Simulator,id=$(SIMULATOR)' \
+		-derivedDataPath build/xcode-test CODE_SIGNING_ALLOWED=NO \
+		-only-testing:SleepTrackerUITests > $(UITEST_LOG) 2>&1 \
+		|| { grep -E 'error:|failed \(' $(UITEST_LOG) | head -30; echo "see $(UITEST_LOG)"; exit 1; }
+	@grep -cE "Test Case .* passed" $(UITEST_LOG) | xargs -I{} echo "{} UI tests passed"
 
 dupes: ## Copy-paste detection across the app and its tests
 	npx --yes jscpd@$(JSCPD_VERSION) . --config .jscpd.json --reporters console

@@ -23,10 +23,15 @@ final class SessionStore {
         return decoder
     }()
 
-    init() {
+    /// `root` is a seam for tests: pass a scratch directory to get a store that reads and
+    /// writes nowhere near a real night. Nil (the default, and what `.shared` uses) picks
+    /// `UITestFixtures.root` when the UI tests are driving the app, or the real
+    /// `Documents/nights` otherwise.
+    init(root: URL? = nil) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        root = docs.appendingPathComponent("nights", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        self.root = root ?? UITestFixtures.root
+            ?? docs.appendingPathComponent("nights", isDirectory: true)
+        try? FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
     }
 
     func directory(for id: String) -> URL {

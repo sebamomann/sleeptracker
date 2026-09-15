@@ -98,14 +98,32 @@ targets:
         SWIFT_VERSION: "5.0"
         DEVELOPMENT_TEAM: H65648747K
 
+  # Drives the real app in the simulator against `UITestFixtures`: open a night, correct a
+  # sound, filter, star, start and stop a recording. `make uitest` runs these.
+  SleepTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SleepTrackerUITests]
+    dependencies:
+      - target: SleepTracker
+    attributes:
+      ProvisioningStyle: Automatic
+      DevelopmentTeam: H65648747K
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: H65648747K
+
 schemes:
   SleepTracker:
     build:
       targets:
         SleepTracker: all
         SleepTrackerTests: [test]
+        SleepTrackerUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
-      targets: [SleepTrackerTests]
+      targets: [SleepTrackerTests, SleepTrackerUITests]

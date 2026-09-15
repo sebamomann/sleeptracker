@@ -5,6 +5,7 @@
 included:
   - ios/SleepTracker
   - ios/SleepTrackerTests
+  - ios/SleepTrackerUITests
 
 opt_in_rules:
   - closure_spacing

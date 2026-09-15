@@ -13,7 +13,8 @@ browser cannot do this; they were removed once they had, and are in git history.
 
 ```sh
 make check      # lint + test + dupes + build — run before finishing every task
-make test       # the Swift tests, on the first available iPhone simulator
+make test       # the Swift unit tests, on the first available iPhone simulator
+make uitest     # end-to-end UI tests against fixture nights — minutes, not in `check`
 make fix        # autocorrect the mechanical half
 make project    # regenerate the Xcode project after adding/moving any Swift file
 make tools      # install the Swift toolchain, and warn if it drifts from CI
@@ -27,6 +28,7 @@ code on every ⌘B — non-strict there, strict in CI.
 ```
 ios/SleepTrackerTests/    Swift Testing suites — gate, capture health, calibration, quiet
                           gaps, timeline, classification vocabulary, the listening delay
+ios/SleepTrackerUITests/  XCUITest — corrections, filter, favourites, delay, start/stop
 ios/SleepTracker/
   App/                    tab shell, entry point
   Design/                 colours, ONE spacing scale, semantic type roles, ALL date formats
@@ -46,6 +48,14 @@ mid-snore, the capture that died and read as healthy. A tuning change moves a te
 The tests are hosted in the app (for `@testable import`), so anything they need must be
 reachable without a microphone, UserDefaults or the disk: keep that logic in pure functions
 like `Calibration.apply(to:)` and `EventRecord.toggleCorrected(_:)`.
+
+**UI tests run against fixture nights, never real ones.** `SLEEPTRACKER_UITEST=fresh|keep`
+in the launch environment makes `UITestFixtures` seed a separate folder and reset the app's
+defaults — only in debug builds **on the simulator**, so pointing the tests at the phone
+cannot wipe its nights. In that mode `CaptureEngine` feeds silence instead of opening the
+microphone: the simulator's input aborts inside AudioToolbox when it cannot reach the Mac's
+mic. Tests find controls by `accessibilityIdentifier` (`kind-picker-<index>`, `star-<index>`,
+`kind-filter`, `night-<id>`); rename one and a test breaks, which is the point.
 
 **Never use raw spacing, fonts or date formats in a view.** `Layout`, the semantic `Font`
 roles and `Fmt` exist because card padding was once 12/13/14/16 and six views each had their
@@ -148,8 +158,9 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 - `xcodebuild` will not resolve an iOS destination unless the iOS platform is installed
   (`xcodebuild -downloadPlatform iOS`, ~8.5 GB). Do not delete simulator runtimes to tidy
   up — doing so removed both and cost the download twice.
-- A simulator runtime (iOS 26.5) is installed, which is all `make test` needs. It picks
-  the first available iPhone rather than a named one, because Xcode updates rename them.
+- Simulator runtimes are installed, which is all `make test` needs. It picks the first
+  available iPhone **by UDID**: a bare name resolves to the newest runtime, and with two
+  installed that runtime may not have a device of that name.
 - Jenkins runs lint and duplication only, in Docker on Linux. It cannot run the tests —
   those need Xcode — so `make check` on the Mac is the only place they run.
 
@@ -181,7 +192,8 @@ transcription sets `requiresOnDeviceRecognition`. Do not add uploads without ask
 
 ## Definition of done
 
-1. Gate, analysis or model change? A test in `ios/SleepTrackerTests` with it.
+1. Gate, analysis or model change? A test in `ios/SleepTrackerTests` with it. Changed a
+   screen the UI tests touch? `make uitest`.
 2. Added or moved a Swift file (tests included)? `make project`.
 3. `make check` — 0 violations, 0 clones, all tests passing, unsigned build succeeds.
 4. Say plainly what was **not** verified. On-device behaviour, classifier accuracy on real

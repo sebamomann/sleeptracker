@@ -31,6 +31,8 @@ struct ContentView: View {
             }
         }
         .task {
+            // A system prompt over the first screen would block every UI test.
+            guard !UITestFixtures.isActive else { return }
             // Asked once, up front, so the first speech event is not silently dropped for
             // want of a permission nobody was prompted for.
             _ = await Transcriber.requestAuthorization()
@@ -80,6 +82,7 @@ private struct NightsTab: View {
                             NavigationLink { NightReport(session: s, store: store) } label: {
                                 row(s)
                             }
+                            .accessibilityIdentifier("night-\(s.id)")
                             .listRowBackground(Color.clear)
                             .listRowSeparatorTint(Theme.line)
                         }

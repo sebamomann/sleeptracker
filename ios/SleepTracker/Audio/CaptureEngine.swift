@@ -26,14 +26,21 @@ final class CaptureEngine {
 
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
+    /// UI tests only: silence instead of the microphone. The simulator's input aborts inside
+    /// AudioToolbox (an RPC timeout in `AURemoteIO::Initialize`) when it cannot reach the
+    /// Mac's microphone, which would make every recording test depend on the host's setup.
+    private var silence: DispatchSourceTimer?
 
     var isRunning: Bool {
-        engine.isRunning
+        silence != nil || engine.isRunning
     }
 
     /// Starts capture and returns a description of the hardware format, for the night's log.
     @discardableResult
     func start() throws -> String {
+        if UITestFixtures.isActive {
+            return startSilence()
+        }
         let input = engine.inputNode
         let hwFormat = input.outputFormat(forBus: 0)
         guard hwFormat.sampleRate > 0 else {
@@ -55,9 +62,28 @@ final class CaptureEngine {
     }
 
     func stop() {
+        if let silence {
+            silence.cancel()
+            self.silence = nil
+            return
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         converter = nil
+    }
+
+    /// A tenth of a second of silence every tenth of a second, so the sample counter that
+    /// liveness and the listening delay depend on advances in real time.
+    private func startSilence() -> String {
+        let timer = DispatchSource.makeTimerSource(
+            queue: DispatchQueue(label: "de.sebamomann.sleeptracker.fixture-capture")
+        )
+        let chunk = [Float](repeating: 0, count: Int(Self.sampleRate / 10))
+        timer.schedule(deadline: .now(), repeating: 0.1)
+        timer.setEventHandler { [weak self] in self?.onSamples?(chunk) }
+        timer.resume()
+        silence = timer
+        return "UI-test silence → \(Int(Self.sampleRate)) Hz mono"
     }
 
     /// Called on the audio thread. The tap's buffer belongs to the engine and is recycled as
