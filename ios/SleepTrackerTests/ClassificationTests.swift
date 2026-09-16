@@ -8,6 +8,7 @@ struct SoundKindTests {
         ("snoring", SoundKind.snoring),
         ("speech", .talking),
         ("cough", .coughing),
+        ("groan", .groaning),
         ("fart", .farting),
         ("sniff", .sniffing),
         ("breathing", .breathing),

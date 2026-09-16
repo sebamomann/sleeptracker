@@ -15,6 +15,7 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
     case talking
     case breathing
     case coughing
+    case groaning
     case sniffing
     case farting
     case movement
@@ -31,6 +32,7 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         case .talking: "Talking"
         case .breathing: "Breathing"
         case .coughing: "Coughing"
+        case .groaning: "Groaning"
         case .sniffing: "Sniffing"
         case .farting: "Farting"
         case .movement: "Movement"
@@ -47,6 +49,7 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         case .talking: "text.bubble"
         case .breathing: "wind"
         case .coughing: "exclamationmark.bubble"
+        case .groaning: "waveform.path.ecg"
         case .sniffing: "allergens"
         case .farting: "cloud"
         case .movement: "bed.double"
@@ -74,6 +77,7 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
     /// specific cases sit above the general ones.
     private static let mapping: [(SoundKind, [String])] = [
         (.snoring, ["snor", "snort"]),
+        (.groaning, ["groan", "grunt", "moan", "whimper"]),
         (.coughing, ["cough", "sneez", "throat", "gag", "chok", "hiccup"]),
         (.sniffing, ["sniff"]),
         (.farting, ["fart"]),
