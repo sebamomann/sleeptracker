@@ -60,10 +60,11 @@ enum SoundKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// The ones worth offering as a correction. `unclear` is something the app concludes,
-    /// never something a person means.
+    /// The ones worth offering as a correction, alphabetically — declaration order would
+    /// read as a ranking, and no sound is more likely than another just because it was
+    /// heard first. `unclear` is something the app concludes, never something a person means.
     static var choices: [SoundKind] {
-        allCases.filter { $0 != .unclear }
+        allCases.filter { $0 != .unclear }.sorted { $0.display < $1.display }
     }
 
     /// Kinds that mean someone was up, which `SleepTimeline` counts as awake. `awake` itself

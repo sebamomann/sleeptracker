@@ -66,6 +66,7 @@ struct KindFilterMenu: View {
         return SoundKind.allCases
             .filter { counts[$0] != nil || filter.kinds.contains($0) }
             .map { ($0, counts[$0] ?? 0) }
+            .sorted { $0.kind.display < $1.kind.display }
     }
 
     private func ticked(_ kind: SoundKind) -> Binding<Bool> {
